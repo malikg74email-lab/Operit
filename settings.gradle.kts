@@ -19,11 +19,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "Operit"
 include(":app")
-include(":dragonbones")
-project(":dragonbones").projectDir = file("avator/dragonbones")
 include(":terminal")
-include(":mmd")
-project(":mmd").projectDir = file("avator/mmd")
-include(":fbx")
-project(":fbx").projectDir = file("avator/fbx")
+// Wave 5 step 5c: :dragonbones/:mmd/:fbx (avator/) are no longer included — the 3D
+// avatar stack is removed. The avator/ directories stay in the repo as orphans and
+// contribute nothing to the build or the APK.
 include(":quickjs")
