@@ -48,8 +48,8 @@ import com.ai.assistance.operit.services.FloatingChatService
 import com.ai.assistance.operit.services.UIDebuggerService
 import com.ai.assistance.operit.data.preferences.DisplayPreferencesManager
 import com.ai.assistance.operit.data.preferences.WakeWordPreferences
-import com.ai.assistance.operit.data.repository.WorkflowRepository
 import com.ai.assistance.operit.ui.main.MainActivity
+import com.ai.assistance.operit.util.LocaleUtils
 import com.ai.assistance.operit.util.WaifuMessageProcessor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -723,7 +723,6 @@ class AIForegroundService : Service() {
     private val wakePrefs by lazy { WakeWordPreferences(applicationContext) }
     @Volatile
     private var wakeSpeechProvider: SpeechService? = null
-    private val workflowRepository by lazy { WorkflowRepository(applicationContext) }
     private val externalHttpPreferences by lazy { ExternalHttpApiPreferences.getInstance(applicationContext) }
 
     private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
@@ -749,7 +748,8 @@ class AIForegroundService : Service() {
     private var wakePhraseRegexEnabled: Boolean = WakeWordPreferences.DEFAULT_WAKE_PHRASE_REGEX_ENABLED
 
     @Volatile
-    private var wakeRecognitionMode: WakeWordPreferences.WakeRecognitionMode = WakeWordPreferences.WakeRecognitionMode.STT
+    private var wakeRecognitionMode: WakeWordPreferences.WakeRecognitionMode =
+        WakeWordPreferences.WakeRecognitionMode.PERSONAL_TEMPLATE
 
     @Volatile
     private var personalWakeTemplates: List<FloatArray> = emptyList()
@@ -784,8 +784,6 @@ class AIForegroundService : Service() {
 
     @Volatile
     private var wakeStopInProgress: Boolean = false
-
-    private var lastSpeechWorkflowCheckAtMs: Long = 0L
 
     private fun ensureWakeSpeechProvider(): SpeechService {
         val existing = wakeSpeechProvider
@@ -1593,8 +1591,15 @@ class AIForegroundService : Service() {
             val initOk = provider.initialize()
             AppLogger.d(TAG, "唤醒识别器 initialize: ok=$initOk")
             wakeListeningMicActiveForRecordingDetection = true
+            // Shaheen 3 wake productisation: the wake recognizer takes its language
+            // from the app's effective locale (same LocaleUtils composition as
+            // getLocalizedContext) instead of a hardcoded "zh-CN".
             val startOk = provider.startRecognition(
-                languageCode = "zh-CN",
+                languageCode =
+                    LocaleUtils.getLocaleForLanguageCode(
+                        LocaleUtils.getCurrentLanguage(applicationContext),
+                        applicationContext,
+                    ).toLanguageTag(),
                 continuousMode = true,
                 partialResults = true,
                 audioSource = MediaRecorder.AudioSource.MIC,
@@ -1658,16 +1663,11 @@ class AIForegroundService : Service() {
                         }
                     }
 
-                    try {
-                        val now = System.currentTimeMillis()
-                        val shouldCheckWorkflows = result.isFinal || now - lastSpeechWorkflowCheckAtMs >= 350L
-                        if (shouldCheckWorkflows) {
-                            lastSpeechWorkflowCheckAtMs = now
-                            workflowRepository.triggerWorkflowsBySpeechEvent(text = text, isFinal = result.isFinal)
-                        }
-                    } catch (e: Exception) {
-                        AppLogger.e(TAG, "Speech trigger processing failed: ${e.message}", e)
-                    }
+                    // Shaheen 3 wake productisation: speech events no longer fire
+                    // workflows from the wake loop (silence discipline — Shaheen
+                    // acts only when the owner calls "Shaheen"; ambient speech must
+                    // not trigger anything). WorkflowRepository.triggerWorkflowsBySpeechEvent
+                    // remains in the repository for manual invocation.
 
                     if (matchWakePhrase(text, currentWakePhrase, wakePhraseRegexEnabled)) {
                         val now = System.currentTimeMillis()
