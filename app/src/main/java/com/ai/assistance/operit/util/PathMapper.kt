@@ -41,7 +41,12 @@ object PathMapper {
      * @return 如果是Linux环境返回true，否则返回false
      */
     fun isLinuxEnvironment(environment: String?): Boolean {
-        return environment?.lowercase() == "linux"
+        // Shaheen 3 strip wave 6 (surface-only): the file tools no longer expose
+        // the Linux environment, so paths are never mapped into the PRoot
+        // rootfs from here. Kept in sync with
+        // StandardFileSystemTools.isLinuxEnvironment; the mapping code itself
+        // stays dormant for the coding-mode phase.
+        return false
     }
     
     /**
