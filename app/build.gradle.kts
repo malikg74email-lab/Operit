@@ -581,7 +581,6 @@ dependencies {
     implementation(project(":terminal"))
     implementation(project(":mmd"))
     implementation(project(":fbx"))
-    implementation(project(":showerclient"))
     implementation(project(":quickjs"))
 
     // glTF runtime rendering (Filament)
