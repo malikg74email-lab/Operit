@@ -364,14 +364,14 @@ fun OperitApp(
         remoteAnnouncement = null
     }
 
+    // Shaheen 2 strip wave 2: NavItem.Packages and NavItem.Workflow are not offered in
+    // the drawer/sidebar. Their routes stay registered in ScreenRouteRegistry.
     val navItems = listOf(
         NavItem.AiChat,
         NavItem.AssistantConfig,
-        NavItem.Packages,
         NavItem.MemoryBase,
         NavItem.Toolbox,
         NavItem.ShizukuCommands,
-        NavItem.Workflow,
         NavItem.Settings,
         NavItem.Help,
         NavItem.About
