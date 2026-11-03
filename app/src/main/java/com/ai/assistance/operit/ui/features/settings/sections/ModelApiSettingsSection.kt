@@ -50,7 +50,6 @@ import com.ai.assistance.operit.api.chat.llmprovider.EndpointCompleter
 import com.ai.assistance.operit.api.chat.EnhancedAIService
 import com.ai.assistance.operit.api.chat.llmprovider.AIServiceFactory
 import com.ai.assistance.operit.api.chat.llmprovider.CodexModelListFetcher
-import com.ai.assistance.operit.api.chat.llmprovider.LlamaProvider
 import com.ai.assistance.operit.api.chat.llmprovider.ModelListFetcher
 import com.ai.assistance.operit.data.api.CodexAuthManager
 import com.ai.assistance.operit.data.api.CodexUsageSnapshot
@@ -133,8 +132,7 @@ fun ModelApiSettingsSection(
         config: ModelConfigData,
         configManager: ModelConfigManager,
         saveCoordinator: ModelConfigSaveCoordinator,
-        showNotification: (String) -> Unit,
-        navigateToMnnModelDownload: (() -> Unit)? = null
+        showNotification: (String) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -450,17 +448,12 @@ fun ModelApiSettingsSection(
     val isUsingDefaultApiKey = apiKeyInput.isBlank()
     val providerRequiresApiKey =
         ApiProviderConfigs.requiresApiKey(selectedProviderTypeId, apiEndpointInput)
-    val isMnnProvider = selectedApiProvider == ApiProviderType.MNN
-    val isLlamaProvider = selectedApiProvider == ApiProviderType.LLAMA_CPP
     val isToolPkgProvider = selectedApiProvider == null
     val canUseKeylessModelUi = isToolPkgProvider || !providerRequiresApiKey
-    val canEditModelName =
-        !isMnnProvider &&
-            !isLlamaProvider &&
-            (canUseKeylessModelUi || !isUsingDefaultApiKey)
+    val canEditModelName = canUseKeylessModelUi || !isUsingDefaultApiKey
     val canRequestModelList = when {
         isCodexProvider -> codexAuthState != null && apiEndpointInput.isNotBlank()
-        isToolPkgProvider || isMnnProvider || isLlamaProvider -> true
+        isToolPkgProvider -> true
         else ->
             apiEndpointInput.isNotBlank() &&
                 (!providerRequiresApiKey || (!isUsingDefaultApiKey && apiKeyInput.isNotBlank()))
@@ -483,8 +476,6 @@ fun ModelApiSettingsSection(
     suspend fun fetchAvailableModels(): Result<List<ModelOption>> {
         return when {
             isCodexProvider -> CodexModelListFetcher.getModelsList()
-            isMnnProvider -> ModelListFetcher.getMnnLocalModels(context)
-            isLlamaProvider -> ModelListFetcher.getLlamaLocalModels(context)
             isToolPkgProvider -> runCatching {
                 val service =
                     AIServiceFactory.createService(
@@ -575,40 +566,7 @@ fun ModelApiSettingsSection(
                 SettingsInfoBanner(text = stringResource(warningType.messageResource()))
             }
 
-            if (isMnnProvider) {
-                MnnSettingsBlock(
-                        mnnForwardTypeInput = mnnForwardTypeInput,
-                        onForwardTypeSelected = { mnnForwardTypeInput = it },
-                        mnnThreadCountInput = mnnThreadCountInput,
-                        onThreadCountChange = { input ->
-                            if (input.isEmpty() || input.toIntOrNull() != null) {
-                                mnnThreadCountInput = input
-                            }
-                        },
-                        navigateToMnnModelDownload = navigateToMnnModelDownload
-                )
-            } else if (isLlamaProvider) {
-                LlamaSettingsBlock(
-                    llamaThreadCountInput = llamaThreadCountInput,
-                    onThreadCountChange = { input ->
-                        if (input.isEmpty() || input.toIntOrNull() != null) {
-                            llamaThreadCountInput = input
-                        }
-                    },
-                    llamaContextSizeInput = llamaContextSizeInput,
-                    onContextSizeChange = { input ->
-                        if (input.isEmpty() || input.toIntOrNull() != null) {
-                            llamaContextSizeInput = input
-                        }
-                    },
-                    llamaGpuLayersInput = llamaGpuLayersInput,
-                    onGpuLayersChange = { input ->
-                        if (input.isEmpty() || input.toIntOrNull() != null) {
-                            llamaGpuLayersInput = input
-                        }
-                    }
-                )
-            } else if (isCodexProvider) {
+            if (isCodexProvider) {
                 CodexAuthSettingsBlock(
                      authState = codexAuthState,
                      usage = codexUsage,
@@ -764,18 +722,14 @@ fun ModelApiSettingsSection(
             }
             SettingsTextField(
                     title = stringResource(R.string.model_name),
-                    subtitle = when {
-                        isMnnProvider -> stringResource(R.string.mnn_select_downloaded_model)
-                        isLlamaProvider -> stringResource(R.string.llama_select_downloaded_model)
-                        else -> stringResource(R.string.model_name_placeholder) + stringResource(R.string.model_name_multiple_hint)
-                    },
+                    subtitle = stringResource(R.string.model_name_placeholder) + stringResource(R.string.model_name_multiple_hint),
                         value = modelNameInput,
                         onValueChange = {
                         if (canEditModelName) {
                                 modelNameInput = it.replace("\n", "").replace("\r", "")
                             }
                         },
-                    enabled = !isMnnProvider && !isLlamaProvider && canEditModelName,
+                    enabled = canEditModelName,
                     trailingContent = {
                 IconButton(
                         onClick = {
@@ -1205,9 +1159,6 @@ fun ModelApiSettingsSection(
                                     val orderedSelection = modelsList.map { it.id }
                                         .filter { selectedModels.value.contains(it) }
                                     modelNameInput = orderedSelection.joinToString(",")
-                                    if (selectedApiProvider == ApiProviderType.MNN) {
-                                        AppLogger.d(TAG, "选择MNN模型: $modelNameInput")
-                                    }
                                     showModelsDialog = false
                                 },
                                 modifier = Modifier.height(36.dp),
@@ -1787,181 +1738,6 @@ internal fun SettingsSwitchRow(
     }
 }
 
-@Composable
-private fun MnnSettingsBlock(
-        mnnForwardTypeInput: Int,
-        onForwardTypeSelected: (Int) -> Unit,
-        mnnThreadCountInput: String,
-        onThreadCountChange: (String) -> Unit,
-        navigateToMnnModelDownload: (() -> Unit)?
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SettingsInfoBanner(text = stringResource(R.string.mnn_local_model_tip))
-
-        navigateToMnnModelDownload?.let { navigate ->
-            Button(
-                    onClick = navigate,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors =
-                            ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-            ) {
-                Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = stringResource(R.string.mnn_model_download))
-            }
-        }
-
-        var showForwardTypeDialog by remember { mutableStateOf(false) }
-
-        SettingsSelectorRow(
-                title = stringResource(R.string.mnn_forward_type),
-                subtitle = stringResource(R.string.select),
-                value = forwardTypeName(mnnForwardTypeInput),
-                onClick = { showForwardTypeDialog = true }
-        )
-
-        if (showForwardTypeDialog) {
-            Dialog(onDismissRequest = { showForwardTypeDialog = false }) {
-                Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surface
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                                text = stringResource(R.string.mnn_forward_type),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                        )
-                        listOf(
-                                0 to "CPU",
-                                3 to "OpenCL",
-                                4 to "Auto",
-                                6 to "OpenGL",
-                                7 to "Vulkan"
-                        ).forEach { (type, name) ->
-                            Surface(
-                                    modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp)
-                                            .clickable {
-                                                onForwardTypeSelected(type)
-                                                showForwardTypeDialog = false
-                                            },
-                                    shape = RoundedCornerShape(8.dp),
-                                    color =
-                                            if (mnnForwardTypeInput == type)
-                                                    MaterialTheme.colorScheme.primaryContainer
-                                            else MaterialTheme.colorScheme.surface
-                            ) {
-                                Text(
-                                        text = name,
-                                        modifier = Modifier.padding(14.dp),
-                                        style = MaterialTheme.typography.bodyLarge
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        SettingsTextField(
-                title = stringResource(R.string.mnn_thread_count),
-                value = mnnThreadCountInput,
-                onValueChange = onThreadCountChange,
-                placeholder = "4",
-                keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Next
-                ),
-                valueFilter = { input -> input.filter { it.isDigit() } }
-        )
-    }
-}
-
-@Composable
-private fun LlamaSettingsBlock(
-        llamaThreadCountInput: String,
-        onThreadCountChange: (String) -> Unit,
-        llamaContextSizeInput: String,
-        onContextSizeChange: (String) -> Unit,
-        llamaGpuLayersInput: String,
-        onGpuLayersChange: (String) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SettingsInfoBanner(text = stringResource(R.string.llama_local_model_tip))
-
-        SettingsInfoBanner(
-            text =
-                stringResource(R.string.llama_local_model_download_tip) +
-                    "\n" +
-                    stringResource(
-                        R.string.llama_local_model_dir,
-                        LlamaProvider.getModelsDir().absolutePath
-                    )
-        )
-
-        SettingsTextField(
-                title = stringResource(R.string.llama_thread_count),
-                value = llamaThreadCountInput,
-                onValueChange = onThreadCountChange,
-                placeholder = "4",
-                keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Next
-                ),
-                valueFilter = { input -> input.filter { it.isDigit() } }
-        )
-
-        SettingsTextField(
-                title = stringResource(R.string.llama_context_size),
-                subtitle = stringResource(R.string.llama_context_size_subtitle),
-                value = llamaContextSizeInput,
-                onValueChange = onContextSizeChange,
-                placeholder = "2048",
-                keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Next
-                ),
-                valueFilter = { input -> input.filter { it.isDigit() } }
-        )
-
-        SettingsTextField(
-                title = stringResource(R.string.llama_gpu_layers),
-                subtitle = stringResource(R.string.llama_gpu_layers_subtitle),
-                value = llamaGpuLayersInput,
-                onValueChange = onGpuLayersChange,
-                placeholder = "0",
-                keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Next
-                ),
-                valueFilter = { input -> input.filter { it.isDigit() } }
-        )
-
-        SettingsInfoBanner(text = stringResource(R.string.llama_auto_config_tip))
-    }
-}
-
-private fun forwardTypeName(type: Int): String {
-    return when (type) {
-        0 -> "CPU"
-        3 -> "OpenCL"
-        4 -> "Auto"
-        6 -> "OpenGL"
-        7 -> "Vulkan"
-        else -> "CPU"
-    }
-}
 
 @Composable
 private fun ApiProviderDialog(
