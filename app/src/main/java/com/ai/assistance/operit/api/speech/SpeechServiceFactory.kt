@@ -215,7 +215,7 @@ object SpeechServiceFactory {
             return acquireLocalSpeechService(context, fallbackEntry.type)
         }
 
-        return createSpeechService(context, SpeechServiceType.SHERPA_NCNN)
+        return createSpeechService(context, SpeechServiceType.OPENAI_STT)
     }
 
     /** 重置单例实例 在需要更改语音识别服务类型或释放资源时调用 */
