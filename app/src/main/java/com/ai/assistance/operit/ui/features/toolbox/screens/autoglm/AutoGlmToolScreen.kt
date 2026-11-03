@@ -7,10 +7,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import com.ai.assistance.operit.R
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
@@ -20,15 +17,12 @@ fun AutoGlmToolScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var task by remember { mutableStateOf("") }
-    var useVirtualScreen by remember { mutableStateOf(false) }
 
     AutoGlmToolContent(
         uiState = uiState,
         task = task,
-        useVirtualScreen = useVirtualScreen,
-        onUseVirtualScreenChange = { useVirtualScreen = it },
         onTaskChange = { task = it },
-        onExecute = { viewModel.executeTask(it, useVirtualScreen) },
+        onExecute = { viewModel.executeTask(it) },
         onCancel = { viewModel.cancelTask() }
     )
 }
@@ -37,8 +31,6 @@ fun AutoGlmToolScreen(
 private fun AutoGlmToolContent(
     uiState: AutoGlmUiState,
     task: String,
-    useVirtualScreen: Boolean,
-    onUseVirtualScreenChange: (Boolean) -> Unit,
     onTaskChange: (String) -> Unit,
     onExecute: (String) -> Unit,
     onCancel: () -> Unit
@@ -58,26 +50,6 @@ private fun AutoGlmToolContent(
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 5
             )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            )
-            {
-                Text(
-                    stringResource(R.string.autoglm_virtual_screen),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Switch(
-                    checked = useVirtualScreen,
-                    onCheckedChange = { onUseVirtualScreenChange(it) },
-                    enabled = !uiState.isLoading
-                )
-            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
