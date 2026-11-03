@@ -249,10 +249,13 @@ object ScreenRouteRegistry {
                 icon = Icons.Default.SmartToy,
                 order = 70
             ),
+            // Shaheen 3 strip wave 6: Terminal hidden from navigation UI (no
+            // surface) — surface-only strip, STRIP_PLAN Target 4 Option A. Route +
+            // launchNavItem stay registered; the :terminal engine stays compiled
+            // and dormant (local MCP deployment + future coding mode).
             hostEntryDefinition(
                 entryId = "toolbox.terminal",
                 screen = Screen.Terminal,
-                surface = NavigationSurface.TOOLBOX,
                 launchNavItem = NavItem.Terminal,
                 titleResId = R.string.tool_terminal,
                 descriptionResId = R.string.tool_terminal_desc,
