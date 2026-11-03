@@ -223,13 +223,13 @@ object MessageImageGenerator {
                                                     // Logo
                                                     Image(
                                                         painter = painterResource(id = com.ai.assistance.operit.R.drawable.ic_launcher_simple_foreground),
-                                                        contentDescription = "Operit Logo",
+                                                        contentDescription = "Shaheen 3 Logo",
                                                         modifier = Modifier.size(48.dp)
                                                     )
                                                     Spacer(modifier = Modifier.width(2.dp))
                                                     // 品牌名称
                                                     Text(
-                                                        text = "Operit AI",
+                                                        text = "Shaheen 3",
                                                         fontSize = 16.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = colorScheme.onSurface
