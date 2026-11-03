@@ -4,10 +4,6 @@ import com.ai.assistance.operit.core.avatar.common.factory.AvatarModelFactory
 import com.ai.assistance.operit.core.avatar.common.model.AvatarModel
 import com.ai.assistance.operit.core.avatar.common.model.AvatarType
 import com.ai.assistance.operit.core.avatar.common.state.AvatarEmotion
-import com.ai.assistance.operit.core.avatar.impl.fbx.model.FbxAvatarModel
-import com.ai.assistance.operit.core.avatar.impl.dragonbones.model.DragonBonesAvatarModel
-import com.ai.assistance.operit.core.avatar.impl.gltf.model.GltfAvatarModel
-import com.ai.assistance.operit.core.avatar.impl.mmd.model.MmdAvatarModel
 import com.ai.assistance.operit.core.avatar.impl.mp4.model.Mp4AvatarModel
 import com.ai.assistance.operit.core.avatar.impl.webp.model.WebPAvatarModel
 import com.ai.assistance.operit.data.model.DragonBonesModel
@@ -22,19 +18,26 @@ class AvatarModelFactoryImpl : AvatarModelFactory {
         data: Map<String, Any>
     ): AvatarModel? {
         return when (type) {
-            AvatarType.DRAGONBONES -> createDragonBonesModel(id, name, data)
+            AvatarType.DRAGONBONES -> createWebPModel(id, name, dragonBonesDataAsWebPData(data))
             AvatarType.WEBP -> createWebPModel(id, name, data)
             AvatarType.MP4 -> createMp4Model(id, name, data)
-            AvatarType.MMD -> createMmdModel(id, name, data)
-            AvatarType.GLTF -> createGltfModel(id, name, data)
-            AvatarType.FBX -> createFbxModel(id, name, data)
+            AvatarType.MMD -> createMp4Model(id, name, data)
+            AvatarType.GLTF -> createMp4Model(id, name, data)
+            AvatarType.FBX -> createMp4Model(id, name, data)
         }
     }
 
     override fun createModelFromData(dataModel: Any): AvatarModel? {
         return when (dataModel) {
             is DragonBonesModel -> {
-                DragonBonesAvatarModel(dataModel)
+                WebPAvatarModel(
+                    id = dataModel.id,
+                    name = dataModel.name,
+                    basePath = dataModel.folderPath,
+                    emotionToFileMap = mapOf(AvatarEmotion.IDLE to dataModel.textureImageFile),
+                    availableFiles = listOf(dataModel.textureImageFile),
+                    currentEmotion = AvatarEmotion.IDLE
+                )
             }
             else -> {
                 if (dataModel is Map<*, *>) {
@@ -64,7 +67,7 @@ class AvatarModelFactoryImpl : AvatarModelFactory {
                     "textureImageFile" to "default_tex.png",
                     "isBuiltIn" to true
                 )
-                createDragonBonesModel("default_dragonbones", baseName, defaultData)
+                createWebPModel("default_dragonbones", baseName, dragonBonesDataAsWebPData(defaultData))
             }
             AvatarType.WEBP -> {
                 WebPAvatarModel.createStandard(
@@ -85,41 +88,34 @@ class AvatarModelFactoryImpl : AvatarModelFactory {
                     "basePath" to "assets/avatars/default",
                     "modelFile" to "default.pmx"
                 )
-                createMmdModel("default_mmd", baseName, defaultData)
+                createMp4Model("default_mmd", baseName, defaultData)
             }
             AvatarType.GLTF -> {
                 val defaultData = mapOf(
                     "basePath" to "assets/avatars/default",
                     "modelFile" to "default.glb"
                 )
-                createGltfModel("default_gltf", baseName, defaultData)
+                createMp4Model("default_gltf", baseName, defaultData)
             }
-            AvatarType.FBX -> null
+            AvatarType.FBX -> {
+                val defaultData = mapOf(
+                    "basePath" to "assets/avatars/default",
+                    "modelFile" to "default.fbx"
+                )
+                createMp4Model("default_fbx", baseName, defaultData)
+            }
         }
     }
 
     override fun validateData(type: AvatarType, data: Map<String, Any>): Boolean {
-        return when (type) {
-            AvatarType.DRAGONBONES,
-            AvatarType.WEBP,
-            AvatarType.MP4,
-            AvatarType.MMD,
-            AvatarType.GLTF,
-            AvatarType.FBX -> {
-                val requiredKeys = getRequiredDataKeys(type)
-                requiredKeys.all { key -> data.containsKey(key) && data[key] != null }
-            }
-        }
+        val requiredKeys = getRequiredDataKeys(type)
+        return requiredKeys.all { key -> data.containsKey(key) && data[key] != null }
     }
 
     override val supportedTypes: List<AvatarType>
         get() = listOf(
-            AvatarType.DRAGONBONES,
             AvatarType.WEBP,
-            AvatarType.MP4,
-            AvatarType.MMD,
-            AvatarType.GLTF,
-            AvatarType.FBX
+            AvatarType.MP4
         )
 
     override fun getRequiredDataKeys(type: AvatarType): List<String> {
@@ -138,28 +134,22 @@ class AvatarModelFactoryImpl : AvatarModelFactory {
         }
     }
 
-    private fun createDragonBonesModel(id: String, name: String, data: Map<String, Any>): AvatarModel? {
-        return try {
-            val folderPath = data["folderPath"] as? String ?: return null
-            val skeletonFile = data["skeletonFile"] as? String ?: return null
-            val textureJsonFile = data["textureJsonFile"] as? String ?: return null
-            val textureImageFile = data["textureImageFile"] as? String ?: return null
-            val isBuiltIn = data["isBuiltIn"] as? Boolean ?: false
+    private fun dragonBonesDataAsWebPData(data: Map<String, Any>): Map<String, Any> {
+        val basePath = data["basePath"] as? String
+            ?: data["folderPath"] as? String
+            ?: return data
 
-            val dataModel = DragonBonesModel(
-                id = id,
-                name = name,
-                folderPath = folderPath,
-                skeletonFile = skeletonFile,
-                textureJsonFile = textureJsonFile,
-                textureImageFile = textureImageFile,
-                isBuiltIn = isBuiltIn
-            )
+        val converted = data.toMutableMap()
+        converted["basePath"] = basePath
 
-            DragonBonesAvatarModel(dataModel)
-        } catch (e: Exception) {
-            null
+        val textureImageFile = data["textureImageFile"] as? String
+        if (!textureImageFile.isNullOrBlank() &&
+            data["webpFiles"] == null &&
+            data["emotionToFileMap"] == null
+        ) {
+            converted["emotionToFileMap"] = mapOf(AvatarEmotion.IDLE.name to textureImageFile)
         }
+        return converted
     }
 
     private fun createWebPModel(id: String, name: String, data: Map<String, Any>): AvatarModel? {
@@ -217,81 +207,6 @@ class AvatarModelFactoryImpl : AvatarModelFactory {
                     basePath = basePath
                 )
             }
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun createMmdModel(id: String, name: String, data: Map<String, Any>): AvatarModel? {
-        return try {
-            val basePath = data["basePath"] as? String ?: return null
-            val modelFile = data["modelFile"] as? String ?: return null
-            val motionFile = data["motionFile"] as? String
-            val motionFiles = (data["motionFiles"] as? List<*>)
-                ?.mapNotNull { it as? String }
-                ?.filter { it.isNotBlank() }
-                .orEmpty()
-
-            MmdAvatarModel(
-                id = id,
-                name = name,
-                basePath = basePath,
-                modelFile = modelFile,
-                motionFile = motionFile,
-                motionFiles = if (motionFiles.isNotEmpty()) {
-                    motionFiles
-                } else {
-                    motionFile?.takeIf { it.isNotBlank() }?.let { listOf(it) }.orEmpty()
-                }
-            )
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun createGltfModel(id: String, name: String, data: Map<String, Any>): AvatarModel? {
-        return try {
-            val basePath = data["basePath"] as? String ?: return null
-            val modelFile = data["modelFile"] as? String ?: return null
-            val defaultAnimation = data["defaultAnimation"] as? String
-            val animationNames = (data["animationNames"] as? List<*>)
-                ?.mapNotNull { it as? String }
-                ?.map { it.trim() }
-                ?.filter { it.isNotBlank() }
-                .orEmpty()
-
-            GltfAvatarModel(
-                id = id,
-                name = name,
-                basePath = basePath,
-                modelFile = modelFile,
-                defaultAnimation = defaultAnimation,
-                declaredAnimationNames = animationNames
-            )
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun createFbxModel(id: String, name: String, data: Map<String, Any>): AvatarModel? {
-        return try {
-            val basePath = data["basePath"] as? String ?: return null
-            val modelFile = data["modelFile"] as? String ?: return null
-            val defaultAnimation = data["defaultAnimation"] as? String
-            val animationNames = (data["animationNames"] as? List<*>)
-                ?.mapNotNull { it as? String }
-                ?.map { it.trim() }
-                ?.filter { it.isNotBlank() }
-                .orEmpty()
-
-            FbxAvatarModel(
-                id = id,
-                name = name,
-                basePath = basePath,
-                modelFile = modelFile,
-                defaultAnimation = defaultAnimation,
-                declaredAnimationNames = animationNames
-            )
         } catch (e: Exception) {
             null
         }
