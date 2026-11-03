@@ -151,7 +151,9 @@ class DisplayPreferencesManager private constructor(private val context: Context
      */
     val globalUserName: Flow<String?> =
         context.displayPreferencesDataStore.data.map { preferences ->
-            preferences[KEY_GLOBAL_USER_NAME]
+            // Shaheen 3 default: the owner is addressed as "Malik" until he
+            // sets a different global user name himself.
+            preferences[KEY_GLOBAL_USER_NAME] ?: "Malik"
         }
 
     val enableBackgroundKeepAlive: Flow<Boolean> =

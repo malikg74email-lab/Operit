@@ -95,7 +95,7 @@ class CharacterCardManager private constructor(private val context: Context) {
         // 默认角色卡ID
         const val DEFAULT_CHARACTER_CARD_ID = "default_character"
 
-        const val DEFAULT_CHARACTER_NAME = "Operit"
+        const val DEFAULT_CHARACTER_NAME = "Shaheen"
         
         @Volatile
         private var INSTANCE: CharacterCardManager? = null
@@ -155,7 +155,7 @@ class CharacterCardManager private constructor(private val context: Context) {
                 if (defaultAvatarUri.isNullOrBlank()) {
                     userPreferencesManager.saveAiAvatarForCharacterCard(
                         DEFAULT_CHARACTER_CARD_ID,
-                        "file:///android_asset/operit.png",
+                        "file:///android_asset/shaheen.png",
                     )
                 }
             }
@@ -678,7 +678,7 @@ class CharacterCardManager private constructor(private val context: Context) {
         activePromptManager.resetThemeDraft(defaultTarget, currentTheme)
         activePromptManager.saveAiAvatarForPrompt(
             defaultTarget,
-            "file:///android_asset/operit.png",
+            "file:///android_asset/shaheen.png",
         )
     }
     
