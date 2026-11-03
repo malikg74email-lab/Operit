@@ -57,7 +57,7 @@ fun AssistantConfigScreen() {
     val wakeListeningEnabled by wakePrefs.alwaysListeningEnabledFlow.collectAsState(initial = WakeWordPreferences.DEFAULT_ALWAYS_LISTENING_ENABLED)
     val wakePhrase by wakePrefs.wakePhraseFlow.collectAsState(initial = WakeWordPreferences.DEFAULT_WAKE_PHRASE)
     val wakePhraseRegexEnabled by wakePrefs.wakePhraseRegexEnabledFlow.collectAsState(initial = WakeWordPreferences.DEFAULT_WAKE_PHRASE_REGEX_ENABLED)
-    val wakeRecognitionMode by wakePrefs.wakeRecognitionModeFlow.collectAsState(initial = WakeWordPreferences.WakeRecognitionMode.STT)
+    val wakeRecognitionMode by wakePrefs.wakeRecognitionModeFlow.collectAsState(initial = WakeWordPreferences.WakeRecognitionMode.PERSONAL_TEMPLATE)
     val personalWakeTemplates by wakePrefs.personalWakeTemplatesFlow.collectAsState(initial = emptyList())
     val inactivityTimeoutSeconds by wakePrefs.voiceCallInactivityTimeoutSecondsFlow.collectAsState(
         initial = WakeWordPreferences.DEFAULT_VOICE_CALL_INACTIVITY_TIMEOUT_SECONDS
@@ -121,6 +121,19 @@ fun AssistantConfigScreen() {
     LaunchedEffect(autoNewChatGroup) {
         if (autoNewChatGroupInput.isBlank()) {
             autoNewChatGroupInput = autoNewChatGroup
+        }
+    }
+
+    // Shaheen 3 first-run nudge: personal-template wake listening can never
+    // trigger until the owner enrols voice samples (the service silently skips
+    // with no templates), so surface the existing enrolment dialog as soon as
+    // always-listening is on in personal-template mode with no templates.
+    LaunchedEffect(wakeListeningEnabled, wakeRecognitionMode, personalWakeTemplates) {
+        if (wakeListeningEnabled &&
+            wakeRecognitionMode == WakeWordPreferences.WakeRecognitionMode.PERSONAL_TEMPLATE &&
+            personalWakeTemplates.isEmpty()
+        ) {
+            personalWakeConfigDialogVisible = true
         }
     }
 
