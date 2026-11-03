@@ -25,7 +25,9 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
     private val apiService = GitHubApiService(context)
     
     companion object {
-        private const val REPO_OWNER = "AAswordman"
+        // Shaheen 3: the update-history surface reads this build's own fork,
+        // not the upstream Operit repository.
+        private const val REPO_OWNER = "malikg74email-lab"
         private const val REPO_NAME = "Operit"
     }
     
