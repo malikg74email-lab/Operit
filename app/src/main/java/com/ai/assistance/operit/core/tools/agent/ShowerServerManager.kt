@@ -13,12 +13,11 @@ import com.ai.assistance.showerclient.ShowerServerManager as CoreShowerServerMan
 object ShowerServerManager {
 
     /**
-     * Ensure the Shower server is started in the background.
-     * Returns true if the start command was issued successfully.
+     * Wave 4, step 1: starting the Shower server is disabled at this facade.
+     * The underlying manager remains linked only until the follow-up deletion
+     * step; this entry point must never delegate a start request to it.
      */
-    suspend fun ensureServerStarted(context: Context): Boolean {
-        return CoreShowerServerManager.ensureServerStarted(context)
-    }
+    suspend fun ensureServerStarted(context: Context): Boolean = false
 
     /**
      * Stop the Shower server process if running.
