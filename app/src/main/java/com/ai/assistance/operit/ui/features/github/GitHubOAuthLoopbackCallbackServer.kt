@@ -99,7 +99,7 @@ internal class GitHubOAuthLoopbackCallbackServer private constructor(
         private const val REQUEST_READ_TIMEOUT_MILLIS = 5_000
         private val SUCCESS_RESPONSE = HttpResponse(
             status = "200 OK",
-            body = "<html><body>GitHub login complete. Return to Operit.</body></html>"
+            body = "<html><body>GitHub login complete. Return to Shaheen 3.</body></html>"
         )
         private val NOT_FOUND_RESPONSE = HttpResponse(
             status = "404 Not Found",
