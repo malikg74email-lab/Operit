@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import android.provider.OpenableColumns
-import com.ai.assistance.fbx.FbxInspector
-import com.ai.assistance.fbx.FbxModelInfo
 import com.ai.assistance.operit.util.AppLogger
 import androidx.core.content.edit
 import com.ai.assistance.operit.core.avatar.common.factory.AvatarModelFactory
@@ -428,67 +426,6 @@ class GltfPersistenceDelegate : AvatarPersistenceDelegate {
     }
 }
 
-class FbxPersistenceDelegate(
-    private val inspectModel: (String) -> FbxModelInfo? = FbxInspector::inspectModel
-) : AvatarPersistenceDelegate {
-    override val type = AvatarType.FBX
-
-    override fun scanDirectory(directory: File, isBuiltIn: Boolean): List<AvatarConfig> {
-        val allConfigs = mutableListOf<AvatarConfig>()
-        if (!directory.exists() || !directory.isDirectory) {
-            AppLogger.d("AvatarRepository", "FBX scan skipped (not dir): ${directory.absolutePath}")
-            return allConfigs
-        }
-
-        val modelFile =
-            directory.listFiles { file ->
-                file.isFile &&
-                    !file.name.startsWith(".operit_", ignoreCase = true) &&
-                    file.extension.equals("fbx", ignoreCase = true)
-            }?.sortedBy { it.name.lowercase() }
-                ?.firstOrNull()
-                ?: return allConfigs
-
-        val modelInfo = inspectModel(modelFile.absolutePath)
-        if (modelInfo == null) {
-            AppLogger.w(
-                "AvatarRepository",
-                "FBX scan failed to inspect ${modelFile.absolutePath}: ${FbxInspector.getLastError()}"
-            )
-            return allConfigs
-        }
-
-        if (modelInfo.missingExternalFiles.isNotEmpty()) {
-            AppLogger.w(
-                "AvatarRepository",
-                "FBX scan skipped ${modelFile.absolutePath} due to missing resources: ${modelInfo.missingExternalFiles.joinToString()}"
-            )
-            return allConfigs
-        }
-
-        val data = buildMap<String, Any> {
-            put("basePath", directory.absolutePath)
-            put("modelFile", modelFile.name)
-            put("animationNames", modelInfo.animationNames)
-            modelInfo.defaultAnimation?.let { put("defaultAnimation", it) }
-        }
-
-        val config = AvatarConfig(
-            id = buildAvatarConfigId(AvatarType.FBX, directory, isBuiltIn),
-            name = directory.name,
-            type = AvatarType.FBX,
-            isBuiltIn = isBuiltIn,
-            data = data
-        )
-        AppLogger.i(
-            "AvatarRepository",
-            "FBX config recognized: ${directory.absolutePath}, model=${modelFile.name}, animations=${if (modelInfo.animationNames.isEmpty()) "<none>" else modelInfo.animationNames.joinToString()}"
-        )
-        allConfigs.add(config)
-        return allConfigs
-    }
-}
-
 /**
  * A generic repository for managing all types of virtual avatars.
  * It handles loading, saving, and managing avatar configurations from both
@@ -530,8 +467,7 @@ class AvatarRepository(
         WebPPersistenceDelegate(),
         Mp4PersistenceDelegate(),
         MmdPersistenceDelegate(),
-        GltfPersistenceDelegate(),
-        FbxPersistenceDelegate()
+        GltfPersistenceDelegate()
     ).associateBy { it.type }
 
     private val _configs = MutableStateFlow<List<AvatarConfig>>(emptyList())
@@ -955,25 +891,14 @@ class AvatarRepository(
             }
 
             if (normalizedExt == "fbx") {
-                val modelInfo = FbxInspector.inspectModel(targetFile.absolutePath)
-                if (modelInfo == null) {
-                    val reason = FbxInspector.getLastError()
-                    targetDir.deleteRecursively()
-                    AppLogger.w(
-                        TAG,
-                        "Imported FBX inspection failed: ${targetFile.absolutePath}, reason=${reason.ifBlank { "<unknown>" }}"
-                    )
-                    return@withContext false
-                }
-
-                if (modelInfo.requiredExternalFiles.isNotEmpty()) {
-                    targetDir.deleteRecursively()
-                    AppLogger.w(
-                        TAG,
-                        "Imported FBX requires external resources and must be packaged as ZIP: ${modelInfo.requiredExternalFiles.joinToString()}"
-                    )
-                    return@withContext false
-                }
+                // Wave 5 step 5c: FBX avatars were removed with the 3D avatar stack;
+                // reject the import directly instead of inspecting the file.
+                targetDir.deleteRecursively()
+                AppLogger.w(
+                    TAG,
+                    "Import failed: FBX avatars are no longer supported: ${targetFile.absolutePath}"
+                )
+                return@withContext false
             }
 
             if (normalizedExt == "gltf") {
@@ -1111,7 +1036,7 @@ class AvatarRepository(
                 AppLogger.w(TAG, "No valid avatar configs found in the imported ZIP. topLevel=$topLevelEntries")
                 AppLogger.w(
                     TAG,
-                    "Import hints: DragonBones needs *_tex.json + *_tex.png; WebP needs .webp; MP4 needs .mp4; MMD needs .pmx/.pmd (optional .vmd); glTF needs .glb/.gltf (+ referenced resources); FBX supports direct .fbx only for self-contained assets, otherwise import ZIP with textures/resources."
+                    "Import hints: DragonBones needs *_tex.json + *_tex.png; WebP needs .webp; MP4 needs .mp4; MMD needs .pmx/.pmd (optional .vmd); glTF needs .glb/.gltf (+ referenced resources)."
                 )
                 return@withContext false
             }
