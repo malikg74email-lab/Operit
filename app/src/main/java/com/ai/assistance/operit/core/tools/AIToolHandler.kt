@@ -181,7 +181,12 @@ class AIToolHandler private constructor(private val context: Context) {
             descriptionGenerator: ((AITool) -> String)? = null,
             executor: ToolExecutor
     ) {
-        availableTools[name] = executor
+        // Verify-after-act (VISION_PLAN_SHAHEEN3.md §4): executors registered under a
+        // mutating UI tool name are wrapped so their reported success is checked against
+        // the real screen state before the result reaches the model. Registration is the
+        // choke point for every execution route (chat loop, executeTool, JS, workflows),
+        // because all of them resolve executors from this registry.
+        availableTools[name] = UiActionVerifier.wrapIfVerifiable(name, executor, context)
 
         // 注册描述生成器（如果提供）
         if (descriptionGenerator != null) {
