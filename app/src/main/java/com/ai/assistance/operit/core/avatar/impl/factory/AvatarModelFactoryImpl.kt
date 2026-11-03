@@ -6,7 +6,6 @@ import com.ai.assistance.operit.core.avatar.common.model.AvatarType
 import com.ai.assistance.operit.core.avatar.common.state.AvatarEmotion
 import com.ai.assistance.operit.core.avatar.impl.mp4.model.Mp4AvatarModel
 import com.ai.assistance.operit.core.avatar.impl.webp.model.WebPAvatarModel
-import com.ai.assistance.operit.data.model.DragonBonesModel
 import java.io.File
 
 class AvatarModelFactoryImpl : AvatarModelFactory {
@@ -28,33 +27,23 @@ class AvatarModelFactoryImpl : AvatarModelFactory {
     }
 
     override fun createModelFromData(dataModel: Any): AvatarModel? {
-        return when (dataModel) {
-            is DragonBonesModel -> {
-                WebPAvatarModel(
-                    id = dataModel.id,
-                    name = dataModel.name,
-                    basePath = dataModel.folderPath,
-                    emotionToFileMap = mapOf(AvatarEmotion.IDLE to dataModel.textureImageFile),
-                    availableFiles = listOf(dataModel.textureImageFile),
-                    currentEmotion = AvatarEmotion.IDLE
-                )
+        // Wave 5 step 5b: data.model.DragonBonesModel is deleted with the 3D impls.
+        // Model creation is 2D-only (WEBP/MP4 via createModel); persisted DragonBones
+        // configs arrive as data maps with type DRAGONBONES, which createModel already
+        // routes to the WebP model path.
+        if (dataModel is Map<*, *>) {
+            val dataMap = dataModel as? Map<String, Any> ?: return null
+            val id = dataMap["id"] as? String ?: return null
+            val name = dataMap["name"] as? String ?: return null
+            val typeStr = dataMap["type"] as? String ?: return null
+            val type = try {
+                AvatarType.valueOf(typeStr)
+            } catch (e: IllegalArgumentException) {
+                return null
             }
-            else -> {
-                if (dataModel is Map<*, *>) {
-                    val dataMap = dataModel as? Map<String, Any> ?: return null
-                    val id = dataMap["id"] as? String ?: return null
-                    val name = dataMap["name"] as? String ?: return null
-                    val typeStr = dataMap["type"] as? String ?: return null
-                    val type = try {
-                        AvatarType.valueOf(typeStr)
-                    } catch (e: IllegalArgumentException) {
-                        return null
-                    }
-                    return createModel(id, name, type, dataMap)
-                }
-                null
-            }
+            return createModel(id, name, type, dataMap)
         }
+        return null
     }
 
     override fun createDefaultModel(type: AvatarType, baseName: String): AvatarModel? {
