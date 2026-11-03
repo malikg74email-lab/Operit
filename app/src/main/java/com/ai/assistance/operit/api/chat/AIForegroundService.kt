@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioRecordingConfiguration
 import android.media.MediaRecorder
@@ -28,6 +29,7 @@ import android.view.WindowManager
 import android.graphics.PixelFormat
 import com.ai.assistance.operit.util.AppLogger
 import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.graphics.drawable.IconCompat
@@ -36,10 +38,17 @@ import com.ai.assistance.operit.api.speech.PersonalWakeListener
 import com.ai.assistance.operit.api.speech.SpeechPrerollStore
 import com.ai.assistance.operit.api.speech.SpeechService
 import com.ai.assistance.operit.api.speech.SpeechServiceFactory
+import com.ai.assistance.operit.api.voice.LiveToolBridge
+import com.ai.assistance.operit.api.voice.RealtimeSessionConfig
+import com.ai.assistance.operit.api.voice.RealtimeSessionState
+import com.ai.assistance.operit.api.voice.RealtimeTranscript
+import com.ai.assistance.operit.api.voice.RealtimeVoiceServiceFactory
+import com.ai.assistance.operit.api.voice.RealtimeVoiceSession
 import com.ai.assistance.operit.core.application.OperitApplication
 import com.ai.assistance.operit.core.chat.AIMessageManager
 import com.ai.assistance.operit.core.application.ActivityLifecycleManager
 import com.ai.assistance.operit.core.application.ForegroundServiceCompat
+import com.ai.assistance.operit.core.config.SystemToolPrompts
 import com.ai.assistance.operit.data.preferences.ExternalHttpApiConfig
 import com.ai.assistance.operit.data.preferences.ExternalHttpApiPreferences
 import com.ai.assistance.operit.integrations.http.ExternalChatHttpServer
@@ -58,7 +67,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
@@ -144,6 +157,77 @@ class AIForegroundService : Service() {
         private val activeReplyNotificationTags = ConcurrentHashMap.newKeySet<String>()
         private val externalHttpStateFlow = MutableStateFlow(ExternalChatHttpState())
         val externalHttpState = externalHttpStateFlow.asStateFlow()
+
+        // --- Shaheen 3 vision Step 5: Live call (background-call plumbing) ---
+        // The Live session is owned by this service (never by FloatingChatService:
+        // it is dataSync-only, and API 34+ background-mic rules require the
+        // microphone FGS type this service already declares). The Step 6 orb UI
+        // drives the call through these intent actions and reads the flows below.
+        const val ACTION_START_LIVE_CALL = "com.ai.assistance.operit.action.START_LIVE_CALL"
+        const val ACTION_END_CALL = "com.ai.assistance.operit.action.END_CALL"
+        const val ACTION_PAUSE_CALL = "com.ai.assistance.operit.action.PAUSE_CALL"
+        const val ACTION_RESUME_CALL = "com.ai.assistance.operit.action.RESUME_CALL"
+        const val ACTION_SET_LIVE_SPEAKER = "com.ai.assistance.operit.action.SET_LIVE_SPEAKER"
+        const val EXTRA_LIVE_SPEAKER_ENABLED = "extra_live_speaker_enabled"
+
+        private const val REQUEST_CODE_END_CALL = 9007
+        private const val REQUEST_CODE_PAUSE_CALL = 9008
+        private const val REQUEST_CODE_RESUME_CALL = 9009
+
+        // Service -> UI state exposure follows this service's own externalHttpState
+        // pattern (companion flows): onBind returns null (started service, no
+        // binder), and FloatContext belongs to FloatingChatService, the wrong
+        // owner for a session that must outlive every window.
+        private val liveCallStateFlow = MutableStateFlow<RealtimeSessionState>(RealtimeSessionState.Ended)
+        val liveCallState: StateFlow<RealtimeSessionState> = liveCallStateFlow.asStateFlow()
+
+        private val liveCallInputTranscriptsFlow =
+            MutableSharedFlow<RealtimeTranscript>(extraBufferCapacity = 64)
+        val liveCallInputTranscripts: SharedFlow<RealtimeTranscript> =
+            liveCallInputTranscriptsFlow.asSharedFlow()
+
+        private val liveCallOutputTranscriptsFlow =
+            MutableSharedFlow<RealtimeTranscript>(extraBufferCapacity = 64)
+        val liveCallOutputTranscripts: SharedFlow<RealtimeTranscript> =
+            liveCallOutputTranscriptsFlow.asSharedFlow()
+
+        private val liveCallAudioLevelFlow = MutableStateFlow(0f)
+        val liveCallAudioLevel: StateFlow<Float> = liveCallAudioLevelFlow.asStateFlow()
+
+        private val liveCallSpeakerEnabledFlow = MutableStateFlow(false)
+        val liveCallSpeakerEnabled: StateFlow<Boolean> = liveCallSpeakerEnabledFlow.asStateFlow()
+
+        fun startLiveCall(context: Context) {
+            startServiceForAction(context, ACTION_START_LIVE_CALL)
+        }
+
+        fun endLiveCall(context: Context) {
+            if (!isRunning.get()) return
+            startServiceForAction(context, ACTION_END_CALL)
+        }
+
+        fun pauseLiveCall(context: Context) {
+            if (!isRunning.get()) return
+            startServiceForAction(context, ACTION_PAUSE_CALL)
+        }
+
+        fun resumeLiveCall(context: Context) {
+            if (!isRunning.get()) return
+            startServiceForAction(context, ACTION_RESUME_CALL)
+        }
+
+        fun setLiveSpeakerEnabled(context: Context, enabled: Boolean) {
+            if (!isRunning.get()) return
+            val intent = Intent(context, AIForegroundService::class.java).apply {
+                action = ACTION_SET_LIVE_SPEAKER
+                putExtra(EXTRA_LIVE_SPEAKER_ENABLED, enabled)
+            }
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "Failed to request live speaker change: ${e.message}", e)
+            }
+        }
         
         // Intent extras keys
         const val EXTRA_CHARACTER_NAME = "extra_character_name"
@@ -537,6 +621,13 @@ class AIForegroundService : Service() {
         AppLogger.d(TAG, "Wake listening suspended by floating fullscreen: $wakeListeningSuspendedForFloatingFullscreen")
         applyWakeListeningState()
     }
+
+    private fun updateWakeListeningSuspendedForLiveCall(active: Boolean) {
+        if (wakeListeningSuspendedForLiveCall == active) return
+        wakeListeningSuspendedForLiveCall = active
+        AppLogger.d(TAG, "Wake listening suspended by live call: $wakeListeningSuspendedForLiveCall")
+        applyWakeListeningState()
+    }
     
     private fun applyWakeListeningState() {
         wakeStateApplyJob?.cancel()
@@ -553,12 +644,16 @@ class AIForegroundService : Service() {
             wakeListeningEnabled &&
                 !wakeListeningSuspendedForIme &&
                 !wakeListeningSuspendedForExternalRecording &&
-                !wakeListeningSuspendedForFloatingFullscreen
+                !wakeListeningSuspendedForFloatingFullscreen &&
+                !wakeListeningSuspendedForLiveCall
 
         if (shouldListen) {
             startWakeListeningLocked()
         } else {
-            val shouldRelease = !wakeListeningEnabled || wakeListeningSuspendedForFloatingFullscreen
+            // The Live call owns the microphone for its duration, like the
+            // floating fullscreen voice surface: the wake provider is released.
+            val shouldRelease = !wakeListeningEnabled || wakeListeningSuspendedForFloatingFullscreen ||
+                wakeListeningSuspendedForLiveCall
             stopWakeListeningLocked(releaseProvider = shouldRelease)
         }
 
@@ -769,10 +864,35 @@ class AIForegroundService : Service() {
     @Volatile
     private var wakeListeningSuspendedForFloatingFullscreen: Boolean = false
 
+    @Volatile
+    private var wakeListeningSuspendedForLiveCall: Boolean = false
+
     private var audioManager: AudioManager? = null
     private var audioRecordingCallback: AudioManager.AudioRecordingCallback? = null
     private var externalHttpServer: ExternalChatHttpServer? = null
     private var externalHttpCurrentPort: Int? = null
+
+    // --- Shaheen 3 vision Step 5: Live call ownership (see the owner block below) ---
+    private var liveSession: RealtimeVoiceSession? = null
+    private var liveToolBridge: LiveToolBridge? = null
+    private var liveSessionJob: Job? = null
+    private var liveRecoveryJob: Job? = null
+    private var liveStateJob: Job? = null
+    private var liveRelayJob: Job? = null
+
+    /** Owner intent: true from an accepted call start until finishLiveCall runs. */
+    @Volatile
+    private var liveCallWanted: Boolean = false
+
+    /** The single resume attempt granted to each call (see handleLiveSessionDrop). */
+    @Volatile
+    private var liveResumeUsed: Boolean = false
+
+    private var liveAudioModeBefore: Int = AudioManager.MODE_NORMAL
+    private var liveAudioModeSaved: Boolean = false
+
+    @Volatile
+    private var liveSpeakerEnabled: Boolean = false
 
     private var lastWakeTriggerAtMs: Long = 0L
 
@@ -890,6 +1010,323 @@ class AIForegroundService : Service() {
         manager.notify(NOTIFICATION_ID, createNotification())
     }
 
+    // ------------------------------------------------------------------
+    // Shaheen 3 vision Step 5: Live call ownership (background-call plumbing)
+    //
+    // This service owns the Gemini Live session end to end: it creates the
+    // session via RealtimeVoiceServiceFactory, attaches the tools bridge,
+    // mirrors the session's flows into the companion flows above for the UI,
+    // posts the call-style notification, and owns the reconnect policy (one
+    // resume attempt with the saved handle, then the drop is surfaced).
+    // The session must NOT live in FloatingChatService (dataSync-only FGS;
+    // API 34+ background-mic rules) nor in a view model (closing a window
+    // must never end a call).
+    // ------------------------------------------------------------------
+
+    private fun isLiveCallOwned(): Boolean {
+        return liveSession != null || liveSessionJob?.isActive == true
+    }
+
+    /**
+     * Starts a Live call. No-op when a call is already live or starting.
+     * A missing microphone permission is published as the call's Error state
+     * with the cause — never a crash, never a silently dead start.
+     */
+    private fun startLiveCall() {
+        if (liveSession != null || liveSessionJob?.isActive == true) {
+            AppLogger.d(TAG, "Live call start ignored: a call is already live or starting")
+            return
+        }
+        if (!hasRecordAudioPermission()) {
+            AppLogger.e(TAG, "Live call start failed: RECORD_AUDIO not granted")
+            liveCallStateFlow.value = RealtimeSessionState.Error(
+                SecurityException(
+                    "Microphone permission is not granted; allow microphone access to start a Live call"
+                )
+            )
+            refreshServiceNotification()
+            return
+        }
+        liveCallWanted = true
+        liveResumeUsed = false
+        liveSessionJob = serviceScope.launch {
+            try {
+                // API 34+ grants the microphone FGS type only while the app is
+                // in the foreground; promote before any capture starts (the
+                // same helper the cascade's SpeechInteractionManager flow uses).
+                tryPromoteToMicrophoneForeground()
+                connectLiveSession(resumeHandle = null)
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "Live call start failed", e)
+                finishLiveCall(RealtimeSessionState.Error(e))
+            }
+        }
+    }
+
+    /**
+     * Creates one session under this service's ownership and wires its relays
+     * and tools bridge. Used for the initial start and for the resume attempt
+     * (with the saved resumption handle).
+     *
+     * Throws only for failures that happen before the provider could record
+     * them itself (no GOOGLE model config, persona resolution). connect()
+     * failures are NOT rethrown: the provider records them in its sessionState
+     * (Error) before throwing, and the state mirror surfaces them through the
+     * drop path — the throw is logged here so it never escapes as an uncaught
+     * coroutine exception.
+     */
+    private suspend fun connectLiveSession(resumeHandle: String?) {
+        val session = RealtimeVoiceServiceFactory.createSession(applicationContext)
+        liveSession = session
+        // The Live capture owns the microphone for the call's duration; the
+        // wake listener stands down exactly as it does for the floating
+        // fullscreen voice surface (and Shaheen must not wake-trigger over
+        // its own call).
+        updateWakeListeningSuspendedForLiveCall(true)
+        enterCallAudioMode()
+        startLiveRelays(session)
+        val config = RealtimeSessionConfig(
+            systemInstruction = RealtimeVoiceServiceFactory.resolveSystemInstruction(applicationContext),
+            // The same English tool catalog the chat path hands its providers
+            // (EnhancedAIService flattens getAIAllCategoriesEn identically).
+            // Role-card filtering stays caller-side, as recorded in Steps 1/2;
+            // execution still passes ToolExecutionManager's permission gate
+            // and the verify-after-act wrapper via the bridge.
+            toolPrompts = SystemToolPrompts.getAIAllCategoriesEn().flatMap { it.tools },
+            resumeHandle = resumeHandle
+        )
+        try {
+            session.connect(config)
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Live session connect failed", e)
+            return
+        }
+        if (liveSession !== session) return // torn down while connecting
+        val bridge = LiveToolBridge(applicationContext)
+        liveToolBridge = bridge
+        bridge.attach(session)
+    }
+
+    private fun startLiveRelays(session: RealtimeVoiceSession) {
+        cancelLiveRelays()
+        liveStateJob = serviceScope.launch {
+            // A fresh provider's state starts at Ended, so an Ended emission is
+            // only a drop once a real session existed: a non-Ended state was
+            // observed, or the server had issued a resumption handle.
+            var activated = false
+            session.sessionState.collect { state ->
+                if (liveSession !== session) return@collect
+                if (state !is RealtimeSessionState.Ended) activated = true
+                when (state) {
+                    is RealtimeSessionState.Error -> {
+                        // Error is only reachable through a connect attempt, so
+                        // it is always actionable. Terminal states are never
+                        // published from here: finishLiveCall is the single
+                        // writer of the published terminal state.
+                        if (liveCallWanted) {
+                            requestLiveSessionRecovery(session, state)
+                        }
+                    }
+                    is RealtimeSessionState.Ended -> {
+                        val hadSession = activated || session.resumptionHandleFlow.value != null
+                        if (liveCallWanted && hadSession) {
+                            requestLiveSessionRecovery(session, state)
+                        }
+                    }
+                    else -> {
+                        liveCallStateFlow.value = state
+                        refreshServiceNotification()
+                    }
+                }
+            }
+        }
+        liveRelayJob = serviceScope.launch {
+            launch {
+                session.inputTranscripts.collect { liveCallInputTranscriptsFlow.tryEmit(it) }
+            }
+            launch {
+                session.outputTranscripts.collect { liveCallOutputTranscriptsFlow.tryEmit(it) }
+            }
+            launch {
+                session.audioLevelFlow.collect { liveCallAudioLevelFlow.value = it }
+            }
+        }
+    }
+
+    private fun cancelLiveRelays() {
+        liveStateJob?.cancel()
+        liveStateJob = null
+        liveRelayJob?.cancel()
+        liveRelayJob = null
+    }
+
+    private fun requestLiveSessionRecovery(session: RealtimeVoiceSession, droppedState: RealtimeSessionState) {
+        if (liveRecoveryJob?.isActive == true) return
+        liveRecoveryJob = serviceScope.launch {
+            handleLiveSessionDrop(session, droppedState)
+        }
+    }
+
+    /**
+     * Reconnect policy: exactly ONE resume attempt per call, using the saved
+     * resumption handle, before the drop is surfaced. (The provider only logs
+     * Gemini's goAway; the subsequent close reaches this owner as the session's
+     * Ended/Error state.) A drop with no handle, a failed resume, or a second
+     * drop ends the call with the truth published: the session's own Error, or
+     * an Error recording that the server closed the connection.
+     */
+    private suspend fun handleLiveSessionDrop(session: RealtimeVoiceSession, droppedState: RealtimeSessionState) {
+        if (liveSession !== session || !liveCallWanted) return
+        val handle = session.resumptionHandleFlow.value
+        if (!liveResumeUsed && handle != null) {
+            liveResumeUsed = true
+            AppLogger.w(
+                TAG,
+                "Live session dropped ($droppedState); attempting one resume with the saved handle"
+            )
+            liveToolBridge?.detach()
+            liveToolBridge = null
+            cancelLiveRelays()
+            session.disconnect()
+            liveSession = null
+            try {
+                connectLiveSession(resumeHandle = handle)
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "Live session resume attempt failed", e)
+                finishLiveCall(RealtimeSessionState.Error(e))
+            }
+            return
+        }
+        val surface = if (droppedState is RealtimeSessionState.Error) {
+            droppedState
+        } else {
+            RealtimeSessionState.Error(
+                IllegalStateException("Live connection closed by the server")
+            )
+        }
+        finishLiveCall(surface)
+    }
+
+    /**
+     * Ends the Live call completely and publishes [finalState] as its terminal
+     * state. Teardown order: session/recovery jobs cancelled -> tools bridge
+     * detach -> session disconnect -> audio mode/route restored -> wake
+     * suspension lifted -> terminal state published -> notification refreshed.
+     * (NOTIFICATION_ID is shared with the assistant's other duties, so the
+     * call notification is replaced by the status notification rather than
+     * cancelled; the id itself is cancelled only when the service stops.)
+     * Idempotent and safe to call with no live call.
+     */
+    private fun finishLiveCall(finalState: RealtimeSessionState) {
+        liveCallWanted = false
+        liveSessionJob?.cancel()
+        liveSessionJob = null
+        liveRecoveryJob?.cancel()
+        liveRecoveryJob = null
+        teardownLiveCallResources()
+        liveCallStateFlow.value = finalState
+        refreshServiceNotification()
+        stopSelfIfIdle(ignoreAppForeground = true)
+    }
+
+    /** Resource half of finishLiveCall (everything except state publication). */
+    private fun teardownLiveCallResources() {
+        liveToolBridge?.detach()
+        liveToolBridge = null
+        cancelLiveRelays()
+        val session = liveSession
+        liveSession = null
+        session?.disconnect()
+        restoreCallAudioMode()
+        updateWakeListeningSuspendedForLiveCall(false)
+        liveCallAudioLevelFlow.value = 0f
+    }
+
+    private fun endLiveCall() {
+        if (!isLiveCallOwned() && !liveCallWanted) {
+            AppLogger.d(TAG, "End Call ignored: no live call")
+            return
+        }
+        finishLiveCall(RealtimeSessionState.Ended)
+    }
+
+    private fun pauseLiveCall() {
+        val session = liveSession ?: return
+        // Provider semantics: capture stops and the audio stream ends while the
+        // session stays connected; the state mirror publishes Paused.
+        session.pauseMic()
+        refreshServiceNotification()
+    }
+
+    private fun resumeLiveCall() {
+        val session = liveSession ?: return
+        session.resumeMic()
+        refreshServiceNotification()
+    }
+
+    /**
+     * Speaker toggle for the Live call — the method the Step 6 UI drives
+     * (through ACTION_SET_LIVE_SPEAKER). Applies immediately and is remembered
+     * across the call's reconnect and for the next call's start.
+     */
+    fun setLiveSpeakerEnabled(enabled: Boolean) {
+        liveSpeakerEnabled = enabled
+        liveCallSpeakerEnabledFlow.value = enabled
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        applySpeakerRoute(am, enabled)
+    }
+
+    private fun enterCallAudioMode() {
+        // A fresh getSystemService each time, deliberately NOT the audioManager
+        // field: that field belongs to the recording-state callback bookkeeping
+        // and is nulled by stopRecordingStateMonitoring.
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        if (!liveAudioModeSaved) {
+            liveAudioModeBefore = am.mode
+            liveAudioModeSaved = true
+        }
+        am.mode = AudioManager.MODE_IN_COMMUNICATION
+        if (liveSpeakerEnabled) {
+            applySpeakerRoute(am, enabled = true)
+        }
+    }
+
+    private fun restoreCallAudioMode() {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        if (liveSpeakerEnabled) {
+            applySpeakerRoute(am, enabled = false)
+            liveSpeakerEnabled = false
+            liveCallSpeakerEnabledFlow.value = false
+        }
+        if (liveAudioModeSaved) {
+            am.mode = liveAudioModeBefore
+            liveAudioModeSaved = false
+        }
+    }
+
+    private fun applySpeakerRoute(am: AudioManager, enabled: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (enabled) {
+                val speaker = am.availableCommunicationDevices.firstOrNull {
+                    it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                }
+                if (speaker != null) {
+                    am.setCommunicationDevice(speaker)
+                } else {
+                    AppLogger.w(
+                        TAG,
+                        "Speaker route requested but no builtin speaker communication device was listed"
+                    )
+                }
+            } else {
+                am.clearCommunicationDevice()
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            am.isSpeakerphoneOn = enabled
+        }
+    }
+
     private fun isExternalHttpEnabledNow(): Boolean {
         return runCatching {
             externalHttpPreferences.getConfigSync().let { config ->
@@ -901,7 +1338,8 @@ class AIForegroundService : Service() {
     private fun stopSelfIfIdle(ignoreAppForeground: Boolean = false) {
         val alwaysListeningEnabled = wakeListeningEnabled || isAlwaysListeningEnabledNow()
         val externalHttpEnabled = externalHttpStateFlow.value.isRunning || isExternalHttpEnabledNow()
-        if (isAiBusy || alwaysListeningEnabled || backgroundKeepAliveEnabled || externalHttpEnabled) {
+        val liveCallActive = isLiveCallOwned()
+        if (isAiBusy || alwaysListeningEnabled || backgroundKeepAliveEnabled || externalHttpEnabled || liveCallActive) {
             return
         }
         if (!ignoreAppForeground && ActivityLifecycleManager.getCurrentActivity() != null) {
@@ -1240,6 +1678,31 @@ class AIForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        if (intent?.action == ACTION_START_LIVE_CALL) {
+            startLiveCall()
+            return START_NOT_STICKY
+        }
+
+        if (intent?.action == ACTION_END_CALL) {
+            endLiveCall()
+            return START_NOT_STICKY
+        }
+
+        if (intent?.action == ACTION_PAUSE_CALL) {
+            pauseLiveCall()
+            return START_NOT_STICKY
+        }
+
+        if (intent?.action == ACTION_RESUME_CALL) {
+            resumeLiveCall()
+            return START_NOT_STICKY
+        }
+
+        if (intent?.action == ACTION_SET_LIVE_SPEAKER) {
+            setLiveSpeakerEnabled(intent.getBooleanExtra(EXTRA_LIVE_SPEAKER_ENABLED, false))
+            return START_NOT_STICKY
+        }
+
         // 从Intent中提取通知信息
         intent?.let {
             characterName = it.getStringExtra(EXTRA_CHARACTER_NAME)
@@ -1255,7 +1718,8 @@ class AIForegroundService : Service() {
                 if (!isAiBusy &&
                     !alwaysListeningEnabled &&
                     !backgroundKeepAliveEnabled &&
-                    !externalHttpEnabled
+                    !externalHttpEnabled &&
+                    !isLiveCallOwned()
                 ) {
                     AppLogger.d(TAG, "服务进入空闲且无持久后台职责，停止前台服务并移除通知")
                     stopSelfIfIdle(ignoreAppForeground = true)
@@ -1288,6 +1752,22 @@ class AIForegroundService : Service() {
             ),
             refreshNotification = false
         )
+        // Live call resources die with the service: bridge, session and the
+        // audio route are released inline (no notification or wake re-apply
+        // while the service is going away).
+        liveCallWanted = false
+        liveSessionJob?.cancel()
+        liveSessionJob = null
+        liveRecoveryJob?.cancel()
+        liveRecoveryJob = null
+        liveToolBridge?.detach()
+        liveToolBridge = null
+        cancelLiveRelays()
+        liveSession?.disconnect()
+        liveSession = null
+        restoreCallAudioMode()
+        wakeListeningSuspendedForLiveCall = false
+        liveCallStateFlow.value = RealtimeSessionState.Ended
         super.onDestroy()
         isRunning.set(false)
         updateAiBusyState(false)
@@ -1854,14 +2334,40 @@ class AIForegroundService : Service() {
         return cleaned
     }
 
+    /** English state line for the Live call notification (front text is English-only). */
+    private fun liveCallContentText(state: RealtimeSessionState): String {
+        return when (state) {
+            RealtimeSessionState.Connecting -> "Shaheen 3 — connecting…"
+            RealtimeSessionState.Connected -> "Shaheen 3 — call in progress"
+            RealtimeSessionState.Listening -> "Shaheen 3 — listening…"
+            RealtimeSessionState.Thinking -> "Shaheen 3 — thinking…"
+            RealtimeSessionState.Speaking -> "Shaheen 3 — speaking…"
+            RealtimeSessionState.Interrupted -> "Shaheen 3 — call in progress"
+            RealtimeSessionState.Paused -> "Shaheen 3 — call paused"
+            RealtimeSessionState.Ended -> "Shaheen 3 — call ended"
+            is RealtimeSessionState.Error -> "Shaheen 3 — call failed"
+        }
+    }
+
     private fun createNotification(): Notification {
         // 为了简单起见，使用一个安卓内置图标。
         // 在实际项目中，应替换为应用的自定义图标。
+        // Shaheen 3 Step 5: while this service owns a Live call, the shared
+        // notification becomes the call notification (call style on API 31+,
+        // End Call / Pause actions below). The existing assistant actions are
+        // still added further down, so Voice window / Wake / Exit — and Stop
+        // while the AI is busy — keep working during a call.
+        val liveCallStateSnapshot = liveCallStateFlow.value
+        val inLiveCall = liveSession != null &&
+            liveCallStateSnapshot !is RealtimeSessionState.Ended &&
+            liveCallStateSnapshot !is RealtimeSessionState.Error
         val wakeListeningEnabledSnapshot = wakeListeningEnabled
         val wakeListeningSuspendedSnapshot = wakeListeningSuspendedForIme || wakeListeningSuspendedForExternalRecording || wakeListeningSuspendedForFloatingFullscreen
         val externalHttpSnapshot = externalHttpStateFlow.value
         val title =
-            if (isAiBusy) {
+            if (inLiveCall) {
+                "Shaheen 3"
+            } else if (isAiBusy) {
                 characterName ?: getString(R.string.service_operit_running)
             } else {
                 if (wakeListeningEnabledSnapshot) {
@@ -1877,7 +2383,9 @@ class AIForegroundService : Service() {
         val activeConversationCount = chatRuntimeHolder.activeConversationCount.value
         val currentSessionToolCount = chatRuntimeHolder.currentSessionToolCount.value
         val contentText =
-            if (isAiBusy && activeConversationCount > 0) {
+            if (inLiveCall) {
+                liveCallContentText(liveCallStateSnapshot)
+            } else if (isAiBusy && activeConversationCount > 0) {
                 val statsText = getString(
                     R.string.service_running_stats,
                     activeConversationCount,
@@ -1906,6 +2414,37 @@ class AIForegroundService : Service() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true) // 使通知不可被用户清除
+
+        // Built once while in a call: the CallStyle hang-up intent (API 31+)
+        // and the discrete End Call action below fire the same PendingIntent.
+        val endCallPendingIntent = if (inLiveCall) {
+            val endCallIntent = Intent(this, AIForegroundService::class.java).apply {
+                action = ACTION_END_CALL
+            }
+            PendingIntent.getService(
+                this,
+                REQUEST_CODE_END_CALL,
+                endCallIntent,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                } else {
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                }
+            )
+        } else {
+            null
+        }
+        if (inLiveCall) {
+            builder
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && endCallPendingIntent != null) {
+                val caller = Person.Builder().setName("Shaheen 3").build()
+                builder.setStyle(
+                    NotificationCompat.CallStyle.forOngoingCall(caller, endCallPendingIntent)
+                )
+            }
+        }
 
         val contentIntent = Intent(this, MainActivity::class.java).apply {
             flags =
@@ -1944,6 +2483,34 @@ class AIForegroundService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT
             )
         }
+        if (inLiveCall && endCallPendingIntent != null) {
+            builder.addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "End Call",
+                endCallPendingIntent
+            )
+
+            val callPaused = liveCallStateSnapshot is RealtimeSessionState.Paused
+            val pauseResumeIntent = Intent(this, AIForegroundService::class.java).apply {
+                action = if (callPaused) ACTION_RESUME_CALL else ACTION_PAUSE_CALL
+            }
+            val pauseResumePendingIntent = PendingIntent.getService(
+                this,
+                if (callPaused) REQUEST_CODE_RESUME_CALL else REQUEST_CODE_PAUSE_CALL,
+                pauseResumeIntent,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                } else {
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                }
+            )
+            builder.addAction(
+                if (callPaused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause,
+                if (callPaused) "Resume" else "Pause",
+                pauseResumePendingIntent
+            )
+        }
+
         builder.addAction(
             android.R.drawable.ic_btn_speak_now,
             getString(R.string.service_voice_floating_window),
