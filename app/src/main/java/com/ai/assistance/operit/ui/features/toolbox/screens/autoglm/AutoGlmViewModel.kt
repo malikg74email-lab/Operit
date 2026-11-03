@@ -10,8 +10,6 @@ import com.ai.assistance.operit.core.tools.agent.AgentConfig
 import com.ai.assistance.operit.core.tools.agent.PhoneAgent
 import com.ai.assistance.operit.core.tools.agent.ToolImplementations
 import com.ai.assistance.operit.core.tools.agent.StepResult
-import com.ai.assistance.operit.core.tools.agent.ShowerController
-import com.ai.assistance.operit.core.tools.agent.ShowerServerManager
 import com.ai.assistance.operit.core.tools.StringResultData
 import com.ai.assistance.operit.core.tools.defaultTool.ToolGetter
 import com.ai.assistance.operit.core.tools.defaultTool.standard.StandardUITools
@@ -37,12 +35,10 @@ class AutoGlmViewModel(private val context: Context) : ViewModel() {
 
     private var executionJob: Job? = null
 
-    private val sessionAgentId: String = java.util.UUID.randomUUID().toString().take(8)
-
     private val _uiState = MutableStateFlow(AutoGlmUiState())
     val uiState: StateFlow<AutoGlmUiState> = _uiState.asStateFlow()
 
-    fun executeTask(task: String, useVirtualScreen: Boolean = false) {
+    fun executeTask(task: String) {
         if (task.isBlank()) return
 
         executionJob?.cancel()
@@ -53,56 +49,6 @@ class AutoGlmViewModel(private val context: Context) : ViewModel() {
             _uiState.value = AutoGlmUiState(isLoading = true, log = logBuilder.toString().trimEnd())
 
             try {
-                val agentIdForRun = if (useVirtualScreen) sessionAgentId else "default"
-                if (useVirtualScreen) {
-                    appendWithTimestamp(logBuilder, "[VirtualScreen] Ensuring Shower virtual display...")
-                    _uiState.value = AutoGlmUiState(isLoading = true, log = logBuilder.toString().trimEnd())
-
-                    val okServer = try {
-                        ShowerServerManager.ensureServerStarted(context)
-                    } catch (e: Exception) {
-                        false
-                    }
-
-                    if (!okServer) {
-                        appendWithTimestamp(logBuilder, "[VirtualScreen] Failed to start Shower server.")
-                        _uiState.value = AutoGlmUiState(
-                            isLoading = false,
-                            log = logBuilder.toString().trimEnd()
-                        )
-                        return@launch
-                    }
-
-                    val metrics = context.resources.displayMetrics
-                    val width = metrics.widthPixels
-                    val height = metrics.heightPixels
-                    val dpi = metrics.densityDpi
-
-                    val okDisplay = try {
-                        ShowerController.ensureDisplay(agentIdForRun, context, width, height, dpi)
-                    } catch (e: Exception) {
-                        false
-                    }
-
-                    val displayId = try {
-                        ShowerController.getDisplayId(agentIdForRun)
-                    } catch (_: Exception) {
-                        null
-                    }
-
-                    if (!okDisplay || displayId == null) {
-                        appendWithTimestamp(logBuilder, "[VirtualScreen] Failed to create virtual display for agentId=$agentIdForRun.")
-                        _uiState.value = AutoGlmUiState(
-                            isLoading = false,
-                            log = logBuilder.toString().trimEnd()
-                        )
-                        return@launch
-                    }
-
-                    appendWithTimestamp(logBuilder, "[VirtualScreen] Virtual display ready. displayId=$displayId")
-                    _uiState.value = AutoGlmUiState(isLoading = true, log = logBuilder.toString().trimEnd())
-                }
-
                 val uiService = EnhancedAIService.getAIServiceForFunction(context, com.ai.assistance.operit.data.model.FunctionType.UI_CONTROLLER)
                 val systemPrompt = buildUiAutomationSystemPrompt()
 
@@ -122,15 +68,13 @@ class AutoGlmViewModel(private val context: Context) : ViewModel() {
                     config = agentConfig,
                     uiService = uiService, // Directly pass the specialized AIService
                     actionHandler = actionHandler,
-                    agentId = agentIdForRun,
-                    cleanupOnFinish = false
+                    agentId = "default"
                 )
 
                 // Header section，尽量贴近官方 CLI
                 appendWithTimestamp(logBuilder, "==================================================")
                 appendWithTimestamp(logBuilder, "Task: $task")
                 appendWithTimestamp(logBuilder, "Max Steps: ${agentConfig.maxSteps}")
-                appendWithTimestamp(logBuilder, "Use Virtual Screen: $useVirtualScreen")
                 appendWithTimestamp(logBuilder, "==================================================")
                 appendWithTimestamp(logBuilder, "")
 
