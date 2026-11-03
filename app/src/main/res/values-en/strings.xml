@@ -584,7 +584,7 @@
     <!-- About Screen -->
     <string name="about_title">About Shaheen 3</string>
     <string name="about_version">Version: %1$s</string>
-    <string name="about_description">Shaheen 3 is Malik's personal mobile agent, created by Azhar Farooq — Pakistani, Mobile Technician &amp; Software. It helps its owner use his device more efficiently, providing interface analysis, chat conversation, and on-screen task execution.</string>
+    <string name="about_description">Shaheen 3 is Malik\'s personal mobile agent, created by Azhar Farooq — Pakistani, Mobile Technician &amp; Software. It helps its owner use his device more efficiently, providing interface analysis, chat conversation, and on-screen task execution.</string>
     <string name="about_developer">Developer: Azhar Farooq — Pakistani</string>
     <string name="about_contact">Contact Us: malikg74.email@gmail.com</string>
     <string name="about_website">&lt;a href="https://github.com/malikg74email-lab/Operit"&gt;GitHub: https://github.com/malikg74email-lab/Operit&lt;/a&gt;</string>
