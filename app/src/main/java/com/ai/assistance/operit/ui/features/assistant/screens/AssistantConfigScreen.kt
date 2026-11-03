@@ -30,7 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ai.assistance.operit.R
 import com.ai.assistance.operit.data.preferences.WakeWordPreferences
+import com.ai.assistance.operit.api.chat.AIForegroundService
 import com.ai.assistance.operit.api.speech.PersonalWakeEnrollment
+import com.ai.assistance.operit.api.voice.RealtimeSessionState
 import com.ai.assistance.operit.ui.features.assistant.components.AvatarConfigSection
 import com.ai.assistance.operit.ui.features.assistant.components.AvatarPreviewSection
 import com.ai.assistance.operit.ui.features.assistant.components.CompactSwitchRow
@@ -80,6 +82,64 @@ fun AssistantConfigScreen() {
                 coroutineScope.launch {
                     wakePrefs.saveAlwaysListeningEnabled(true)
                 }
+            } else {
+                android.widget.Toast.makeText(
+                    context,
+                    context.getString(R.string.microphone_permission_denied_toast),
+                    android.widget.Toast.LENGTH_SHORT
+                )
+                    .show()
+            }
+        }
+
+    // Shaheen 3 Step 0 test entry: the Live session is owned by
+    // AIForegroundService (Step 5 plumbing). This screen only displays the
+    // service's published state/transcripts and sends its start/end/pause/
+    // resume/speaker actions — the comprehension test needs the heard text
+    // visible on the phone before the orb UI (Step 6) exists.
+    val liveCallState by AIForegroundService.liveCallState.collectAsState()
+    val liveSpeakerEnabled by AIForegroundService.liveCallSpeakerEnabled.collectAsState()
+    var liveHeardCurrent by remember { mutableStateOf("") }
+    var liveShaheenCurrent by remember { mutableStateOf("") }
+    var liveTranscriptHistory by remember { mutableStateOf<List<String>>(emptyList()) }
+    val liveHeardLabel = context.getString(R.string.live_call_test_heard_label)
+    val liveShaheenLabel = context.getString(R.string.live_call_test_shaheen_label)
+
+    LaunchedEffect(Unit) {
+        launch {
+            AIForegroundService.liveCallInputTranscripts.collect { transcript ->
+                if (transcript.text.isNotBlank()) {
+                    liveHeardCurrent = transcript.text
+                    if (transcript.finished) {
+                        liveTranscriptHistory =
+                            (liveTranscriptHistory + "$liveHeardLabel: ${transcript.text}")
+                                .takeLast(6)
+                    }
+                }
+            }
+        }
+        launch {
+            AIForegroundService.liveCallOutputTranscripts.collect { transcript ->
+                if (transcript.text.isNotBlank()) {
+                    liveShaheenCurrent = transcript.text
+                    if (transcript.finished) {
+                        liveTranscriptHistory =
+                            (liveTranscriptHistory + "$liveShaheenLabel: ${transcript.text}")
+                                .takeLast(6)
+                    }
+                }
+            }
+        }
+    }
+
+    // Same mic-permission mechanism as the wake section's launcher above:
+    // on grant, proceed with the action that needed the microphone.
+    val requestLiveCallMicPermissionLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { isGranted ->
+            if (isGranted) {
+                AIForegroundService.startLiveCall(context)
             } else {
                 android.widget.Toast.makeText(
                     context,
@@ -589,6 +649,145 @@ fun AssistantConfigScreen() {
                                         wakePrefs.saveVoiceAutoAttachItems(newItems)
                                     }
                                 }
+                            )
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 0.dp))
+
+                        // Live call (test) — Step 0 harness surface only; the
+                        // product call screen is the Step 6 orb UI. All state
+                        // shown here is AIForegroundService's published state;
+                        // the buttons send its companion actions and nothing
+                        // else (no session logic lives in this screen).
+                        Text(
+                            text = stringResource(R.string.live_call_test_section_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            text = stringResource(R.string.live_call_test_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        val liveCallActive =
+                            liveCallState != RealtimeSessionState.Ended &&
+                                liveCallState !is RealtimeSessionState.Error
+
+                        val liveStateLabel =
+                            when (val liveState = liveCallState) {
+                                RealtimeSessionState.Ended -> "Ended"
+                                RealtimeSessionState.Connecting -> "Connecting"
+                                RealtimeSessionState.Connected -> "Connected"
+                                RealtimeSessionState.Listening -> "Listening"
+                                RealtimeSessionState.Thinking -> "Thinking"
+                                RealtimeSessionState.Speaking -> "Speaking"
+                                RealtimeSessionState.Interrupted -> "Interrupted"
+                                RealtimeSessionState.Paused -> "Paused"
+                                is RealtimeSessionState.Error ->
+                                    stringResource(
+                                        R.string.live_call_test_error_format,
+                                        liveState.cause.message
+                                            ?: liveState.cause.javaClass.simpleName
+                                    )
+                            }
+
+                        Text(
+                            text =
+                                stringResource(
+                                    R.string.live_call_test_state_format,
+                                    liveStateLabel
+                                ),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilledTonalButton(
+                                modifier = Modifier.weight(1f),
+                                enabled = !liveCallActive,
+                                onClick = {
+                                    val granted =
+                                        ContextCompat.checkSelfPermission(
+                                            context,
+                                            Manifest.permission.RECORD_AUDIO
+                                        ) == PackageManager.PERMISSION_GRANTED
+                                    if (granted) {
+                                        AIForegroundService.startLiveCall(context)
+                                    } else {
+                                        requestLiveCallMicPermissionLauncher.launch(
+                                            Manifest.permission.RECORD_AUDIO
+                                        )
+                                    }
+                                }
+                            ) {
+                                Text(text = stringResource(R.string.live_call_test_start))
+                            }
+
+                            OutlinedButton(
+                                modifier = Modifier.weight(1f),
+                                enabled = liveCallActive,
+                                onClick = { AIForegroundService.endLiveCall(context) }
+                            ) {
+                                Text(text = stringResource(R.string.live_call_test_end))
+                            }
+
+                            if (liveCallState == RealtimeSessionState.Paused) {
+                                OutlinedButton(
+                                    modifier = Modifier.weight(1f),
+                                    enabled = liveCallActive,
+                                    onClick = { AIForegroundService.resumeLiveCall(context) }
+                                ) {
+                                    Text(text = stringResource(R.string.live_call_test_resume))
+                                }
+                            } else {
+                                OutlinedButton(
+                                    modifier = Modifier.weight(1f),
+                                    enabled = liveCallActive,
+                                    onClick = { AIForegroundService.pauseLiveCall(context) }
+                                ) {
+                                    Text(text = stringResource(R.string.live_call_test_pause))
+                                }
+                            }
+                        }
+
+                        CompactSwitchRow(
+                            title = stringResource(R.string.live_call_test_speaker_title),
+                            description = stringResource(R.string.live_call_test_speaker_desc),
+                            checked = liveSpeakerEnabled,
+                            onCheckedChange = { enabled ->
+                                AIForegroundService.setLiveSpeakerEnabled(context, enabled)
+                            }
+                        )
+
+                        if (liveHeardCurrent.isNotBlank()) {
+                            Text(
+                                text =
+                                    "${stringResource(R.string.live_call_test_heard_label)}: " +
+                                        liveHeardCurrent,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        if (liveShaheenCurrent.isNotBlank()) {
+                            Text(
+                                text =
+                                    "${stringResource(R.string.live_call_test_shaheen_label)}: " +
+                                        liveShaheenCurrent,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        liveTranscriptHistory.forEach { line ->
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
