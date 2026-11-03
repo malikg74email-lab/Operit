@@ -49,14 +49,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ai.assistance.operit.R
-import com.ai.assistance.operit.core.tools.AIToolHandler
-import com.ai.assistance.operit.core.tools.packTool.PackageManager
 import com.ai.assistance.operit.core.tools.system.AndroidPermissionLevel
 import com.ai.assistance.operit.core.tools.system.ShizukuAuthorizer
 import com.ai.assistance.operit.core.tools.system.action.ActionListenerFactory
 import com.ai.assistance.operit.data.preferences.UserPreferencesManager
 import com.ai.assistance.operit.data.preferences.androidPermissionPreferences
-import com.ai.assistance.operit.data.repository.WorkflowRepository
 import com.ai.assistance.operit.ui.common.NavItem
 import com.ai.assistance.operit.ui.main.screens.ScreenRouteRegistry
 import com.ai.assistance.operit.ui.main.navigation.NavigationEntrySpec
@@ -156,27 +153,8 @@ fun DrawerContent(
         val fixedBottomItems = remember {
                 setOf(NavItem.Settings, NavItem.Help, NavItem.About)
         }
-        val quickActionItems = remember {
-                setOf(NavItem.Packages, NavItem.Workflow)
-        }
-        val packageManager = remember(context) {
-                PackageManager.getInstance(context, AIToolHandler.getInstance(context))
-        }
-        val workflowRepository = remember(context) { WorkflowRepository(context) }
-        val activePackageCount by
-                produceState(initialValue = 0, selectedRouteId) {
-                        value =
-                                withContext(Dispatchers.IO) {
-                                        packageManager.getEnabledPackageNames().size
-                                }
-                }
-        val workflowCount by
-                produceState(initialValue = 0, selectedRouteId) {
-                        value =
-                                withContext(Dispatchers.IO) {
-                                        workflowRepository.getAllWorkflows().getOrDefault(emptyList()).size
-                                }
-                }
+        // Shaheen 2 strip wave 2: the Packages/Workflow quick-action cards are gone, so
+        // their badge counts (enabled packages / workflow total) are no longer computed.
         val permissionStatus by
                 produceState(
                         initialValue =
@@ -198,7 +176,6 @@ fun DrawerContent(
                 remember(navItems) {
                         navItems.filterNot {
                                 it in fixedBottomItems ||
-                                        it in quickActionItems ||
                                         it == NavItem.ShizukuCommands
                         }
                 }
@@ -250,8 +227,6 @@ fun DrawerContent(
                                 networkType = networkType,
                                 appearance = appearance,
                                 navItems = primaryNavItems,
-                                activePackageCount = activePackageCount,
-                                workflowCount = workflowCount,
                                 permissionStatus = permissionStatus,
                                 onNavItemClick = handleNavItemClick,
                                 onNavigationEntryClick = handleNavigationEntryClick
@@ -455,8 +430,6 @@ private fun NewSidebarTopContent(
         networkType: String,
         appearance: NavigationDrawerAppearance,
         navItems: List<NavItem>,
-        activePackageCount: Int,
-        workflowCount: Int,
         permissionStatus: SidebarPermissionStatus,
         onNavItemClick: (NavItem) -> Unit,
         onNavigationEntryClick: (NavigationEntrySpec) -> Unit
@@ -478,15 +451,8 @@ private fun NewSidebarTopContent(
                                 .padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-                SidebarQuickActionCard(
-                        modifier = Modifier.weight(1f),
-                        icon = NavItem.Packages.icon,
-                        label = stringResource(id = NavItem.Packages.titleResId),
-                        badgeText = activePackageCount.toString(),
-                        selected = selectedItem == NavItem.Packages,
-                        appearance = appearance,
-                        onClick = { onNavItemClick(NavItem.Packages) }
-                )
+                // Shaheen 2 strip wave 2: Packages and Workflow quick-action cards removed;
+                // only the permission (ShizukuCommands) card remains in this row.
                 SidebarQuickActionCard(
                         modifier = Modifier.weight(1f),
                         icon = NavItem.ShizukuCommands.icon,
@@ -495,15 +461,6 @@ private fun NewSidebarTopContent(
                         selected = selectedItem == NavItem.ShizukuCommands,
                         appearance = appearance,
                         onClick = { onNavItemClick(NavItem.ShizukuCommands) }
-                )
-                SidebarQuickActionCard(
-                        modifier = Modifier.weight(1f),
-                        icon = NavItem.Workflow.icon,
-                        label = stringResource(id = NavItem.Workflow.titleResId),
-                        badgeText = workflowCount.toString(),
-                        selected = selectedItem == NavItem.Workflow,
-                        appearance = appearance,
-                        onClick = { onNavItemClick(NavItem.Workflow) }
                 )
         }
 
