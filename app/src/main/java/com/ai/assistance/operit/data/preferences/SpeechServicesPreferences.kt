@@ -75,7 +75,7 @@ class SpeechServicesPreferences(private val context: Context) {
 
         // Default Values
         val DEFAULT_TTS_SERVICE_TYPE = VoiceServiceFactory.VoiceServiceType.SIMPLE_TTS
-        val DEFAULT_STT_SERVICE_TYPE = SpeechServiceFactory.SpeechServiceType.SHERPA_NCNN
+        val DEFAULT_STT_SERVICE_TYPE = SpeechServiceFactory.SpeechServiceType.OPENAI_STT
 
         const val DEFAULT_TTS_SPEECH_RATE = 1.0f
         const val DEFAULT_TTS_PITCH = 1.0f
