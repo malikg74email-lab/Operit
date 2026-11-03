@@ -15,6 +15,7 @@ import com.ai.assistance.operit.api.speech.SpeechPrerollStore
 import com.ai.assistance.operit.api.speech.WakePhraseSnapshot
 import com.ai.assistance.operit.api.speech.SpeechServiceFactory
 import com.ai.assistance.operit.api.voice.VoiceServiceFactory
+import com.ai.assistance.operit.util.LocaleUtils
 import com.ai.assistance.operit.util.TtsCleaner
 import com.ai.assistance.operit.util.WaifuMessageProcessor
 import kotlinx.coroutines.CoroutineScope
@@ -161,8 +162,16 @@ class SpeechInteractionManager(
                     if (attempt > 0) {
                         delay(160)
                     }
+                    // Shaheen 3 wake productisation: recognition language comes
+                    // from the app's effective locale (same LocaleUtils composition
+                    // as LocaleUtils.getLocalizedContext) instead of a hardcoded
+                    // "zh-CN", so the cascade can hear Roman Urdu / Urdu / English.
                     ok = speechService.startRecognition(
-                        languageCode = "zh-CN",
+                        languageCode =
+                            LocaleUtils.getLocaleForLanguageCode(
+                                LocaleUtils.getCurrentLanguage(context),
+                                context,
+                            ).toLanguageTag(),
                         continuousMode = true,
                         partialResults = true
                     )
