@@ -130,7 +130,16 @@ class UpdateManager private constructor(private val context: Context) {
     }
 
     /** 检查更新的内部实现 */
+    // Shaheen 3 identity phase: upstream Operit self-update is disabled.
+    // This build is maintained as Shaheen 3 (fork: malikg74email-lab/Operit);
+    // the upstream AAswordman/Operit release + nightly patch channels must
+    // never offer an "update" that would restore Operit branding, so every
+    // check (startup silent check and the About screen's manual check)
+    // reports UpToDate without any network call. The upstream implementation
+    // below the early return is intentionally left in place, unreachable.
+    @Suppress("UNREACHABLE_CODE")
     private suspend fun checkForUpdatesInternal(currentVersion: String): UpdateStatus {
+        return UpdateStatus.UpToDate
         return withContext(Dispatchers.IO) {
             try {
                 val betaEnabled = try {
