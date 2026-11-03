@@ -5,12 +5,13 @@ import com.ai.assistance.showerclient.ShowerController as ClientShowerController
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Lightweight controller to talk to the Shower server running locally on the device.
- * Maintains multiple instances keyed by agentId.
+ * App-side Shower facade.
  *
- * Responsibilities:
- * - Manage Binder connections to the Shower service (shared via ClientShowerController's companion)
- * - Support multiple virtual screens for concurrent PhoneAgent tasks
+ * Wave 4, step 1 deliberately severs Shower behaviour here before the
+ * subsystem is deleted in the follow-up step. Display queries therefore
+ * always report that Shower is unavailable, and server, display, capture,
+ * and input operations never delegate to the Shower client. Controller
+ * instances are retained only to preserve this facade's existing API.
  */
 object ShowerController {
 
@@ -24,39 +25,35 @@ object ShowerController {
     /** Checks if a controller instance exists for the given agentId. */
     fun hasInstance(agentId: String): Boolean = instances.containsKey(agentId)
 
-    /** Gets the display ID for a specific agent. */
-    fun getDisplayId(agentId: String): Int? = instances[agentId]?.getDisplayId()
+    /** Shower is disabled, so no display ID is ever reported. */
+    fun getDisplayId(agentId: String): Int? = null
 
     fun getDisplayId(): Int? = getDisplayId("default")
 
-    /** Gets the video size for a specific agent. */
-    fun getVideoSize(agentId: String): Pair<Int, Int>? = instances[agentId]?.getVideoSize()
+    /** Shower is disabled, so no video size is ever reported. */
+    fun getVideoSize(agentId: String): Pair<Int, Int>? = null
 
     fun getVideoSize(): Pair<Int, Int>? = getVideoSize("default")
 
-    /** Sets the binary video frame handler for a specific agent. */
-    fun setBinaryHandler(agentId: String, handler: ((ByteArray) -> Unit)?) =
-        instances[agentId]?.setBinaryHandler(handler)
+    /** No Shower video stream is attached while the facade is disabled. */
+    fun setBinaryHandler(agentId: String, handler: ((ByteArray) -> Unit)?) {
+        // Intentionally no-op: do not connect the handler to a Shower stream.
+    }
 
     fun setBinaryHandler(handler: ((ByteArray) -> Unit)?) = setBinaryHandler("default", handler)
 
-    suspend fun requestScreenshot(agentId: String, timeoutMs: Long = 3000L): ByteArray? =
-        getInstance(agentId).requestScreenshot(timeoutMs)
+    suspend fun requestScreenshot(agentId: String, timeoutMs: Long = 3000L): ByteArray? = null
 
     suspend fun requestScreenshot(timeoutMs: Long = 3000L): ByteArray? =
         requestScreenshot("default", timeoutMs)
 
-    /**
-     * Prepares Shower input for the physical main display (displayId=0) without creating
-     * a virtual display.
-     */
-    suspend fun prepareMainDisplay(agentId: String, context: Context): Boolean =
-        getInstance(agentId).prepareMainDisplay(context)
+    /** Shower input preparation for the physical main display is disabled. */
+    suspend fun prepareMainDisplay(agentId: String, context: Context): Boolean = false
 
     suspend fun prepareMainDisplay(context: Context): Boolean =
         prepareMainDisplay("default", context)
 
-    /** Ensures a virtual display is created and ready for the specified agent. */
+    /** Shower virtual-display creation is disabled. */
     suspend fun ensureDisplay(
         agentId: String,
         context: Context,
@@ -64,7 +61,7 @@ object ShowerController {
         height: Int,
         dpi: Int,
         bitrateKbps: Int? = null,
-    ): Boolean = getInstance(agentId).ensureDisplay(context, width, height, dpi, bitrateKbps)
+    ): Boolean = false
 
     suspend fun ensureDisplay(
         context: Context,
@@ -74,20 +71,18 @@ object ShowerController {
         bitrateKbps: Int? = null,
     ): Boolean = ensureDisplay("default", context, width, height, dpi, bitrateKbps)
 
-    /** Launches an app on the virtual display associated with the specified agent. */
-    suspend fun launchApp(agentId: String, packageName: String): Boolean =
-        getInstance(agentId).launchApp(packageName)
+    /** App launches through Shower are disabled. */
+    suspend fun launchApp(agentId: String, packageName: String): Boolean = false
 
     suspend fun launchApp(packageName: String): Boolean =
         launchApp("default", packageName)
 
-    /** Performs a tap action on the virtual display associated with the specified agent. */
-    suspend fun tap(agentId: String, x: Int, y: Int): Boolean =
-        getInstance(agentId).tap(x, y)
+    /** Tap input through Shower is disabled. */
+    suspend fun tap(agentId: String, x: Int, y: Int): Boolean = false
 
     suspend fun tap(x: Int, y: Int): Boolean = tap("default", x, y)
 
-    /** Performs a swipe action on the virtual display associated with the specified agent. */
+    /** Swipe input through Shower is disabled. */
     suspend fun swipe(
         agentId: String,
         startX: Int,
@@ -95,7 +90,7 @@ object ShowerController {
         endX: Int,
         endY: Int,
         durationMs: Long = 300L,
-    ): Boolean = getInstance(agentId).swipe(startX, startY, endX, endY, durationMs)
+    ): Boolean = false
 
     suspend fun swipe(
         startX: Int,
@@ -105,21 +100,18 @@ object ShowerController {
         durationMs: Long = 300L,
     ): Boolean = swipe("default", startX, startY, endX, endY, durationMs)
 
-    /** Performs a touch down action on the virtual display associated with the specified agent. */
-    suspend fun touchDown(agentId: String, x: Int, y: Int): Boolean =
-        getInstance(agentId).touchDown(x, y)
+    /** Touch-down input through Shower is disabled. */
+    suspend fun touchDown(agentId: String, x: Int, y: Int): Boolean = false
 
     suspend fun touchDown(x: Int, y: Int): Boolean = touchDown("default", x, y)
 
-    /** Performs a touch move action on the virtual display associated with the specified agent. */
-    suspend fun touchMove(agentId: String, x: Int, y: Int): Boolean =
-        getInstance(agentId).touchMove(x, y)
+    /** Touch-move input through Shower is disabled. */
+    suspend fun touchMove(agentId: String, x: Int, y: Int): Boolean = false
 
     suspend fun touchMove(x: Int, y: Int): Boolean = touchMove("default", x, y)
 
-    /** Performs a touch up action on the virtual display associated with the specified agent. */
-    suspend fun touchUp(agentId: String, x: Int, y: Int): Boolean =
-        getInstance(agentId).touchUp(x, y)
+    /** Touch-up input through Shower is disabled. */
+    suspend fun touchUp(agentId: String, x: Int, y: Int): Boolean = false
 
     suspend fun touchUp(x: Int, y: Int): Boolean = touchUp("default", x, y)
 
@@ -137,20 +129,7 @@ object ShowerController {
         yPrecision: Float,
         deviceId: Int,
         edgeFlags: Int,
-    ): Boolean = getInstance(agentId).injectTouchEvent(
-        action,
-        x,
-        y,
-        downTime,
-        eventTime,
-        pressure,
-        size,
-        metaState,
-        xPrecision,
-        yPrecision,
-        deviceId,
-        edgeFlags
-    )
+    ): Boolean = false
 
     suspend fun injectTouchEvent(
         action: Int,
@@ -188,12 +167,10 @@ object ShowerController {
 
     fun shutdown() = shutdown("default")
 
-    /** Injects a key event into the virtual display associated with the specified agent. */
-    suspend fun key(agentId: String, keyCode: Int): Boolean =
-        getInstance(agentId).key(keyCode)
+    /** Key input through Shower is disabled. */
+    suspend fun key(agentId: String, keyCode: Int): Boolean = false
 
-    suspend fun keyWithMeta(agentId: String, keyCode: Int, metaState: Int): Boolean =
-        getInstance(agentId).keyWithMeta(keyCode, metaState)
+    suspend fun keyWithMeta(agentId: String, keyCode: Int, metaState: Int): Boolean = false
 
     suspend fun key(keyCode: Int): Boolean = key("default", keyCode)
 
