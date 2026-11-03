@@ -55,123 +55,6 @@ object SystemToolPromptsInternal {
 """
                         ),
                         ToolPrompt(
-                            name = "create_terminal_session",
-                            description = "Create or get a terminal session.",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "session_name",
-                                        type = "string",
-                                        description = "terminal session name",
-                                        required = true
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
-                            name = "execute_in_terminal_session",
-                            description = "Execute a command in a terminal session and collect full output.",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "session_id",
-                                        type = "string",
-                                        description = "terminal session id",
-                                        required = true
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "command",
-                                        type = "string",
-                                        description = "command to execute",
-                                        required = true
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "timeout_ms",
-                                        type = "integer",
-                                        description = "optional, command timeout in milliseconds",
-                                        required = false,
-                                        default = "1800000"
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
-                            name = "execute_hidden_terminal_command",
-                            description = "Execute a command in a hidden non-PTY terminal executor. Commands using the same executor_key reuse the same hidden login context and are not shown in the visible terminal UI.",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "command",
-                                        type = "string",
-                                        description = "command to execute",
-                                        required = true
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "executor_key",
-                                        type = "string",
-                                        description = "optional, hidden executor key used to reuse the same background shell context",
-                                        required = false,
-                                        default = "default"
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "timeout_ms",
-                                        type = "integer",
-                                        description = "optional, command timeout in milliseconds",
-                                        required = false,
-                                        default = "120000"
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
-                            name = "input_in_terminal_session",
-                            description = "Write input to a terminal session. At least one of input or control is required. Typical usage is sending input first, then control=enter to submit.",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "session_id",
-                                        type = "string",
-                                        description = "terminal session id",
-                                        required = true
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "input",
-                                        type = "string",
-                                        description = "text to write to the terminal (can include newlines)",
-                                        required = false
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "control",
-                                        type = "string",
-                                        description = "control key or modifier (e.g. enter/tab/esc/up/down/left/right/home/end/pageup/pagedown, or ctrl with input=c for Ctrl+C)",
-                                        required = false
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
-                            name = "close_terminal_session",
-                            description = "Close a terminal session.",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "session_id",
-                                        type = "string",
-                                        description = "terminal session id",
-                                        required = true
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
-                            name = "get_terminal_session_screen",
-                            description = "Get only the current visible PTY screen content for a terminal session (single screen, no scrollback/history).",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "session_id",
-                                        type = "string",
-                                        description = "terminal session id",
-                                        required = true
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
                             name = "music_play",
                             description = "Play audio inside the app using the built-in music player.",
                             parametersStructured =
@@ -2515,11 +2398,6 @@ object SystemToolPromptsInternal {
                 tools =
                     listOf(
                         ToolPrompt(
-                            name = "close_all_virtual_displays",
-                            description = "Close all virtual display overlays.",
-                            parametersStructured = listOf()
-                        ),
-                        ToolPrompt(
                             name = "modify_system_setting",
                             description = "Modify a system setting.",
                             parametersStructured =
@@ -3045,123 +2923,6 @@ object SystemToolPromptsInternal {
     1. **如果需要重写整个已存在文件**：不要用 apply_file 直接覆盖。请先 `delete_file`，再使用 `apply_file` 且 `type=create`。
     2. **如果需要修改已存在文件**：必须用 `type=replace`（或 `type=delete`）并提供 `old/new`（或 `old`）。不要删除整个文件再重写。
 """
-                        ),
-                        ToolPrompt(
-                            name = "create_terminal_session",
-                            description = "创建或获取终端会话。",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "session_name",
-                                        type = "string",
-                                        description = "终端会话名称",
-                                        required = true
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
-                            name = "execute_in_terminal_session",
-                            description = "在终端会话中执行命令，并一次性返回完整输出。",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "session_id",
-                                        type = "string",
-                                        description = "终端会话 ID",
-                                        required = true
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "command",
-                                        type = "string",
-                                        description = "要执行的命令",
-                                        required = true
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "timeout_ms",
-                                        type = "integer",
-                                        description = "可选，超时时间（毫秒）",
-                                        required = false,
-                                        default = "1800000"
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
-                            name = "execute_hidden_terminal_command",
-                            description = "在隐藏的非 PTY 终端执行器中执行命令。使用相同 executor_key 的命令会复用同一个后台登录上下文，且不会显示在可见终端 UI 中。",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "command",
-                                        type = "string",
-                                        description = "要执行的命令",
-                                        required = true
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "executor_key",
-                                        type = "string",
-                                        description = "可选，用于复用同一个后台 shell 上下文的隐藏执行器 key",
-                                        required = false,
-                                        default = "default"
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "timeout_ms",
-                                        type = "integer",
-                                        description = "可选，超时时间（毫秒）",
-                                        required = false,
-                                        default = "120000"
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
-                            name = "input_in_terminal_session",
-                            description = "向终端会话写入输入。input 与 control 至少传一个。通常先发送 input，再发送 control=enter 提交内容。",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "session_id",
-                                        type = "string",
-                                        description = "终端会话 ID",
-                                        required = true
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "input",
-                                        type = "string",
-                                        description = "要写入终端的文本（可包含换行）",
-                                        required = false
-                                    ),
-                                    ToolParameterSchema(
-                                        name = "control",
-                                        type = "string",
-                                        description = "控制键或修饰键（如 enter/tab/esc/up/down/left/right/home/end/pageup/pagedown，或 control=ctrl 且 input=c 表示 Ctrl+C）",
-                                        required = false
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
-                            name = "close_terminal_session",
-                            description = "关闭终端会话。",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "session_id",
-                                        type = "string",
-                                        description = "终端会话 ID",
-                                        required = true
-                                    )
-                                )
-                        ),
-                        ToolPrompt(
-                            name = "get_terminal_session_screen",
-                            description = "获取终端会话当前可见 PTY 屏幕内容（仅一屏，不包含历史滚动缓冲）。",
-                            parametersStructured =
-                                listOf(
-                                    ToolParameterSchema(
-                                        name = "session_id",
-                                        type = "string",
-                                        description = "终端会话 ID",
-                                        required = true
-                                    )
-                                )
                         ),
                         ToolPrompt(
                             name = "music_play",
@@ -5506,11 +5267,6 @@ object SystemToolPromptsInternal {
                 categoryName = "内部系统工具",
                 tools =
                     listOf(
-                        ToolPrompt(
-                            name = "close_all_virtual_displays",
-                            description = "关闭所有虚拟屏幕。",
-                            parametersStructured = listOf()
-                        ),
                         ToolPrompt(
                             name = "modify_system_setting",
                             description = "修改系统设置。",
