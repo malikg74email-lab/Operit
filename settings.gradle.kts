@@ -17,7 +17,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Operit"
+rootProject.name = "Shaheen"
 include(":app")
 include(":terminal")
 // Wave 5 step 5c: :dragonbones/:mmd/:fbx (avator/) are no longer included — the 3D
