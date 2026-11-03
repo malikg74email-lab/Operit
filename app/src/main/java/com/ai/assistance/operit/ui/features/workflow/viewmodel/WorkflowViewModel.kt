@@ -467,7 +467,6 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         val sendId = UUID.randomUUID().toString()
         val stopId = UUID.randomUUID().toString()
         val broadcastId = UUID.randomUUID().toString()
-        val closeDisplaysId = UUID.randomUUID().toString()
 
         val trigger = TriggerNode(
             id = triggerId,
@@ -535,28 +534,20 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             position = templateNodePosition(6)
         )
 
-        val closeAllDisplays = ExecuteNode(
-            id = closeDisplaysId,
-            name = context.getString(R.string.workflow_action_close_displays),
-            actionType = "close_all_virtual_displays",
-            position = templateNodePosition(7)
-        )
-
         val connections = listOf(
             WorkflowNodeConnection(sourceNodeId = triggerId, targetNodeId = startId),
             WorkflowNodeConnection(sourceNodeId = startId, targetNodeId = createChatId),
             WorkflowNodeConnection(sourceNodeId = createChatId, targetNodeId = extractMessageId),
             WorkflowNodeConnection(sourceNodeId = extractMessageId, targetNodeId = sendId),
             WorkflowNodeConnection(sourceNodeId = sendId, targetNodeId = stopId),
-            WorkflowNodeConnection(sourceNodeId = stopId, targetNodeId = broadcastId),
-            WorkflowNodeConnection(sourceNodeId = broadcastId, targetNodeId = closeDisplaysId)
+            WorkflowNodeConnection(sourceNodeId = stopId, targetNodeId = broadcastId)
         )
 
         return Workflow(
             id = UUID.randomUUID().toString(),
             name = name,
             description = description,
-            nodes = listOf(trigger, startChat, createChat, extractMessage, sendMessage, stopChat, sendBroadcast, closeAllDisplays),
+            nodes = listOf(trigger, startChat, createChat, extractMessage, sendMessage, stopChat, sendBroadcast),
             connections = connections
         )
     }
@@ -567,7 +558,6 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         val createChatId = UUID.randomUUID().toString()
         val sendId = UUID.randomUUID().toString()
         val stopId = UUID.randomUUID().toString()
-        val closeDisplaysId = UUID.randomUUID().toString()
 
         val trigger = TriggerNode(
             id = triggerId,
@@ -614,26 +604,18 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             position = templateNodePosition(4)
         )
 
-        val closeAllDisplays = ExecuteNode(
-            id = closeDisplaysId,
-            name = context.getString(R.string.workflow_action_close_displays),
-            actionType = "close_all_virtual_displays",
-            position = templateNodePosition(5)
-        )
-
         val connections = listOf(
             WorkflowNodeConnection(sourceNodeId = triggerId, targetNodeId = startId),
             WorkflowNodeConnection(sourceNodeId = startId, targetNodeId = createChatId),
             WorkflowNodeConnection(sourceNodeId = createChatId, targetNodeId = sendId),
-            WorkflowNodeConnection(sourceNodeId = sendId, targetNodeId = stopId),
-            WorkflowNodeConnection(sourceNodeId = stopId, targetNodeId = closeDisplaysId)
+            WorkflowNodeConnection(sourceNodeId = sendId, targetNodeId = stopId)
         )
 
         return Workflow(
             id = UUID.randomUUID().toString(),
             name = name,
             description = description,
-            nodes = listOf(trigger, startChat, createChat, sendMessage, stopChat, closeAllDisplays),
+            nodes = listOf(trigger, startChat, createChat, sendMessage, stopChat),
             connections = connections
         )
     }
