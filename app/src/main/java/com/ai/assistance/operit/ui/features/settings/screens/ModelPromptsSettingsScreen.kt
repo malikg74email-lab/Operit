@@ -2521,7 +2521,7 @@ fun TagTab(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // 第二行：导入/导出/市场
+                // 第二行：导入/导出
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -2546,15 +2546,8 @@ fun TagTab(
                         Text(stringResource(R.string.export), fontSize = 12.sp)
                     }
 
-                    OutlinedButton(
-                        onClick = onNavigateToMarket,
-                        enabled = !isImporting && !isExporting,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Icon(Icons.Default.Store, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.tag_market), fontSize = 12.sp)
-                    }
+                    // Shaheen 2 strip wave 2: Tag Market button removed — the market
+                    // surface is hidden. Screen.TagMarket stays registered as a route.
                 }
 
                 if (isImporting || isExporting) {
