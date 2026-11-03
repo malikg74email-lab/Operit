@@ -130,14 +130,10 @@ object ToolGetter {
         return StandardSendBroadcastToolExecutor(context)
     }
 
-    /**
-     * 获取终端命令执行器
-     * @param context 应用上下文
-     * @return 终端命令执行器实现（只有标准版本）
-     */
-    fun getTerminalCommandExecutor(context: Context): StandardTerminalCommandExecutor {
-        return StandardTerminalCommandExecutor(context)
-    }
+    // Shaheen 3 strip wave 6: getTerminalCommandExecutor removed — the terminal
+    // tools are unregistered in ToolRegistration (surface-only strip, STRIP_PLAN
+    // Target 4 Option A). StandardTerminalCommandExecutor stays compiled and
+    // dormant; the :terminal engine is kept for local MCP deployment.
 
     /**
      * 获取音乐播放工具执行器
