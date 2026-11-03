@@ -23,7 +23,6 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ai.assistance.operit.R
 import com.ai.assistance.operit.core.tools.system.AndroidPermissionLevel
-import com.ai.assistance.operit.ui.main.screens.Screen
 import com.ai.assistance.operit.ui.main.screens.ScreenNavigationHandler
 import com.ai.assistance.operit.core.tools.system.AccessibilityProviderInstaller
 import com.ai.assistance.operit.core.tools.system.ShizukuAuthorizer
@@ -32,7 +31,6 @@ import com.ai.assistance.operit.data.repository.UIHierarchyManager
 import com.ai.assistance.operit.ui.features.demo.components.*
 import com.ai.assistance.operit.ui.features.demo.viewmodel.ShizukuDemoViewModel
 import com.ai.assistance.operit.ui.features.demo.wizards.AccessibilityWizardCard
-import com.ai.assistance.operit.ui.features.demo.wizards.OperitTerminalWizardCard
 import com.ai.assistance.operit.ui.features.demo.wizards.RootWizardCard
 import com.ai.assistance.operit.ui.features.demo.wizards.ShizukuWizardCard
 import kotlinx.coroutines.Dispatchers
@@ -249,8 +247,9 @@ fun ShizukuDemoScreen(
                     }
                 },
                 onOperitTerminalClick = {
-                    // 点击时总是打开向导
-                    viewModel.toggleOperitTerminalWizard()
+                    // Shaheen 3 strip wave 6: the OperitTerminal setup wizard is
+                    // hidden (surface-only strip), so the status row no longer
+                    // opens it. The wizard code stays compiled and dormant.
                 },
                 onRootClick = {
                     // 处理Root权限
@@ -266,8 +265,8 @@ fun ShizukuDemoScreen(
                 }
         )
 
-        // 组合向导卡片到一个专门的设置区域 - 现在检查NodeJS和Python环境
-        val needOperitTerminalSetupGuide = !viewModel.isNodejsPythonEnvironmentReady.value
+        // Shaheen 3 strip wave 6: the OperitTerminal (NodeJS/Python) setup guide
+        // is hidden, so its need-check no longer feeds the wizard section below.
 
         // 检查Shizuku版本状态 - 使用remember缓存结果，避免每次重组时重复调用
         val (installedVersion, bundledVersion, isUpdateNeeded) =
@@ -304,7 +303,7 @@ fun ShizukuDemoScreen(
                             isAccessibilityUpdateNeeded)
 
 
-        val needSetupGuide = needOperitTerminalSetupGuide || needShizukuSetupGuide || needRootSetupGuide || needAccessibilitySetupGuide
+        val needSetupGuide = needShizukuSetupGuide || needRootSetupGuide || needAccessibilitySetupGuide
 
         if (needSetupGuide) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -663,20 +662,9 @@ fun ShizukuDemoScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // NodeJS和Python环境配置向导卡片
-            if (needOperitTerminalSetupGuide) {
-                OperitTerminalWizardCard(
-                    isPnpmInstalled = viewModel.isPnpmInstalled.value,
-                    isPipInstalled = viewModel.isPythonInstalled.value,
-                    isEnvironmentReady = viewModel.isNodejsPythonEnvironmentReady.value,
-                    showWizard = uiState.showOperitTerminalWizard.value,
-                    onToggleWizard = { viewModel.toggleOperitTerminalWizard() },
-                    onOpenTerminalScreen = { 
-                        // 跳转到TerminalSetup，直接显示配置界面
-                        navigateTo?.invoke(Screen.TerminalSetup)
-                    }
-                )
-            }
+            // Shaheen 3 strip wave 6: the OperitTerminal (NodeJS/Python) setup
+            // wizard card is removed from this screen (surface-only strip).
+            // OperitTerminalWizardCard itself stays compiled and dormant.
         }
     }
 }
