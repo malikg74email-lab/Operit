@@ -1,14 +1,11 @@
 package com.ai.assistance.operit.core.tools.agent
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
-import android.view.KeyEvent
 import androidx.core.content.FileProvider
 import com.ai.assistance.operit.R
 import com.ai.assistance.operit.api.chat.llmprovider.AIService
@@ -26,7 +23,6 @@ import com.ai.assistance.operit.data.preferences.DisplayPreferencesManager
 import com.ai.assistance.operit.data.preferences.androidPermissionPreferences
 import com.ai.assistance.operit.services.FloatingChatService
 import com.ai.assistance.operit.ui.common.displays.UIAutomationProgressOverlay
-import com.ai.assistance.operit.ui.common.displays.VirtualDisplayOverlay
 import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.util.ImageOutputFormat
 import com.ai.assistance.operit.util.ImagePoolManager
@@ -122,7 +118,6 @@ class PhoneAgent(
     private val uiService: AIService,
     private val actionHandler: ActionHandler,
     val agentId: String = "default",
-    private val cleanupOnFinish: Boolean = (agentId != "default"),
 ) {
     private var _stepCount = 0
     val stepCount: Int
@@ -156,28 +151,8 @@ class PhoneAgent(
         }
     }
 
-    private fun hasShowerDisplay(logMessageSuffix: String): Boolean {
-        if (isMainScreenAgent) return false
-        return try {
-            ShowerController.getDisplayId(agentId) != null || ShowerController.getVideoSize(agentId) != null
-        } catch (e: Exception) {
-            AppLogger.e("PhoneAgent", "[$agentId] $logMessageSuffix", e)
-            false
-        }
-    }
-
-    private fun shouldUseShowerUi(hasShowerDisplay: Boolean): Boolean {
-        // Main-screen Shower only borrows Shower for capture/input; the visible agent UI
-        // should stay aligned with the regular main-screen automation experience.
-        return !isMainScreenAgent && hasShowerDisplay
-    }
-
     private suspend fun ensureRequiredVirtualScreenOrError(): String? {
         if (!requiresVirtualScreen) return null
-
-        if (hasShowerDisplay("Error checking Shower state before ensure")) {
-            return null
-        }
 
         val permissionState = resolvePrivilegedExecutionState(
             context = context,
@@ -191,157 +166,10 @@ class PhoneAgent(
             return context.getString(R.string.phone_agent_shizuku_unavailable)
         }
 
-        val okServer = try {
-            ShowerServerManager.ensureServerStarted(context)
-        } catch (e: Exception) {
-            AppLogger.e("PhoneAgent", "[$agentId] ensureRequiredVirtualScreen: ensureServerStarted failed", e)
-            false
-        }
-
-        if (!okServer) {
-            return context.getString(R.string.phone_agent_virtual_screen_service_start_failed)
-        }
-
-        val metrics = context.resources.displayMetrics
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
-        val dpi = metrics.densityDpi
-        val bitrateKbps = try {
-            DisplayPreferencesManager.getInstance(context).getVirtualDisplayBitrateKbps()
-        } catch (_: Exception) {
-            3000
-        }
-
-        val okDisplay = try {
-            ShowerController.ensureDisplay(agentId, context, width, height, dpi, bitrateKbps = bitrateKbps)
-        } catch (e: Exception) {
-            AppLogger.e("PhoneAgent", "[$agentId] ensureRequiredVirtualScreen: ensureDisplay failed", e)
-            false
-        }
-
-        val displayId = try {
-            ShowerController.getDisplayId(agentId)
-        } catch (_: Exception) {
-            null
-        }
-
-        if (!okDisplay || displayId == null) {
-            return context.getString(R.string.phone_agent_virtual_screen_create_failed)
-        }
-
-        try {
-            VirtualDisplayOverlay.getInstance(context, agentId).show(displayId)
-        } catch (e: Exception) {
-            AppLogger.e("PhoneAgent", "[$agentId] ensureRequiredVirtualScreen: error showing overlay", e)
-        }
-
-        return null
-    }
-
-    private suspend fun prewarmShowerIfNeeded(
-        hasShowerDisplayAtStart: Boolean,
-        targetApp: String?
-    ): Pair<Boolean, String?> {
-        if (isMainScreenAgent) return Pair(false, null)
-        if (hasShowerDisplayAtStart) return Pair(true, null)
-        val targetAppForPrewarm = targetApp?.takeIf { it.isNotBlank() } ?: return Pair(false, null)
-
-        val permissionState = resolvePrivilegedExecutionState(
-            context = context,
-            androidPermissionPreferences = androidPermissionPreferences
-        )
-        if (!permissionState.isAdbOrHigher) return Pair(false, null)
-        if (!permissionState.hasDebuggerShizukuAccess) {
-            return Pair(false, context.getString(R.string.phone_agent_shizuku_unavailable))
-        }
-
-        AppLogger.d(
-            "PhoneAgent",
-            "[$agentId] run: prewarming Shower virtual display via Launch(app='$targetAppForPrewarm')"
-        )
-        val prewarmResult = try {
-            actionHandler.executeAgentAction(
-                ParsedAgentAction(
-                    metadata = "do",
-                    actionName = "Launch",
-                    fields = mapOf(
-                        "action" to "Launch",
-                        "app" to targetAppForPrewarm
-                    )
-                )
-            )
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            return Pair(false, context.getString(R.string.phone_agent_virtual_screen_prewarm_failed, e.message ?: ""))
-        }
-
-        val hasShowerAfterPrewarm = hasShowerDisplay("Error checking Shower state after prewarm")
-        if (!hasShowerAfterPrewarm) {
-            return Pair(false, prewarmResult.message ?: context.getString(R.string.phone_agent_virtual_screen_not_started))
-        }
-
-        return Pair(true, null)
-    }
-
-    private suspend fun prewarmMainScreenShowerIfPossible(): Boolean {
-        if (!isMainScreenAgent) return false
-
-        val permissionState = resolvePrivilegedExecutionState(
-            context = context,
-            androidPermissionPreferences = androidPermissionPreferences
-        )
-        if (!permissionState.isAdbOrHigher) return false
-        if (!permissionState.hasDebuggerShizukuAccess) return false
-
-        val okServer = try {
-            ShowerServerManager.ensureServerStarted(context)
-        } catch (e: Exception) {
-            AppLogger.e("PhoneAgent", "[$agentId] prewarmMainScreenShower: ensureServerStarted failed", e)
-            false
-        }
-        if (!okServer) return false
-
-        val okMainDisplay = try {
-            ShowerController.prepareMainDisplay(agentId, context)
-        } catch (e: Exception) {
-            AppLogger.e("PhoneAgent", "[$agentId] prewarmMainScreenShower: prepareMainDisplay failed", e)
-            false
-        }
-        if (okMainDisplay) {
-            AppLogger.d("PhoneAgent", "[$agentId] main-screen Shower prewarm ready (displayId=0)")
-        }
-        return okMainDisplay
-    }
-
-    private suspend fun prewarmMainScreenLaunchIfNeeded(targetApp: String?): String? {
-        if (!isMainScreenAgent) return null
-        val targetAppForPrewarm = targetApp?.takeIf { it.isNotBlank() } ?: return null
-
-        AppLogger.d(
-            "PhoneAgent",
-            "[$agentId] run: prewarming main-screen launch via Launch(app='$targetAppForPrewarm')"
-        )
-        val prewarmResult = try {
-            actionHandler.executeAgentAction(
-                ParsedAgentAction(
-                    metadata = "do",
-                    actionName = "Launch",
-                    fields = mapOf(
-                        "action" to "Launch",
-                        "app" to targetAppForPrewarm
-                    )
-                )
-            )
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            return "Exception while prewarming main-screen app launch: ${e.message}"
-        }
-
-        return if (prewarmResult.success) {
-            null
-        } else {
-            prewarmResult.message ?: "Failed to prewarm main-screen app launch"
-        }
+        // The Shower virtual-display subsystem has been removed, so a dedicated
+        // virtual screen can never be provided. Fail closed instead of running
+        // the agent against a display that does not exist.
+        return context.getString(R.string.phone_agent_virtual_screen_service_start_failed)
     }
 
     /**
@@ -373,69 +201,30 @@ class PhoneAgent(
             return requiredVirtualScreenError
         }
 
-        val mainScreenShowerReady = prewarmMainScreenShowerIfPossible()
-        actionHandler.setMainScreenShowerPrepared(mainScreenShowerReady)
-        if (mainScreenShowerReady) {
-            val mainScreenPrewarmError = prewarmMainScreenLaunchIfNeeded(targetApp)
-            if (mainScreenPrewarmError != null) {
-                return mainScreenPrewarmError
-            }
-        }
-
-        var hasShowerDisplayAtStart = hasShowerDisplay("Error checking Shower virtual display state")
-        val (prewarmedShowerDisplay, prewarmError) = prewarmShowerIfNeeded(hasShowerDisplayAtStart, targetApp)
-        if (prewarmError != null) {
-            return prewarmError
-        }
-        hasShowerDisplayAtStart = prewarmedShowerDisplay
-
-        var useShowerUi = shouldUseShowerUi(hasShowerDisplayAtStart)
         val progressOverlay = UIAutomationProgressOverlay.getInstance(context)
-        var showerOverlay: VirtualDisplayOverlay? = if (useShowerUi) try {
-            VirtualDisplayOverlay.getInstance(context, agentId)
-        } catch (e: Exception) {
-            AppLogger.e("PhoneAgent", "[$agentId] Error getting VirtualDisplayOverlay instance", e)
-            null
-        } else null
 
         val pausedMutable = isPausedFlow as? MutableStateFlow<Boolean>
 
         try {
-            // Setup UI for agent run: hide window, then choose indicator based on whether Shower virtual display is active
+            // Setup UI for agent run: hide window and show the fullscreen status indicator.
             floatingService?.setFloatingWindowVisible(false)
-            if (useShowerUi) {
-                useShowerIndicatorForAgent(context, agentId)
-            } else {
-                useFullscreenStatusIndicatorForAgent(context, agentId)
-            }
-            if (useShowerUi) {
-                showerOverlay?.showAutomationControls(
-                    totalSteps = config.maxSteps,
-                    initialStatus = context.getString(R.string.phone_agent_thinking),
-                    onTogglePauseResume = { isPaused -> pausedMutable?.value = isPaused },
-                    onExit = {
-                        PhoneAgentJobRegistry.cancelAgent(agentId, "User cancelled UI automation")
-                        job?.cancel(CancellationException("User cancelled UI automation"))
-                    }
-                )
-            } else {
-                progressOverlay.show(
-                    config.maxSteps,
-                    context.getString(R.string.phone_agent_thinking),
-                    onCancel = {
-                        PhoneAgentJobRegistry.cancelAgent(agentId, "User cancelled UI automation")
-                        job?.cancel(CancellationException("User cancelled UI automation"))
-                    },
-                    onToggleTakeOver = { isPaused -> pausedMutable?.value = isPaused }
-                )
-            }
+            useFullscreenStatusIndicatorForAgent(context, agentId)
+            progressOverlay.show(
+                config.maxSteps,
+                context.getString(R.string.phone_agent_thinking),
+                onCancel = {
+                    PhoneAgentJobRegistry.cancelAgent(agentId, "User cancelled UI automation")
+                    job?.cancel(CancellationException("User cancelled UI automation"))
+                },
+                onToggleTakeOver = { isPaused -> pausedMutable?.value = isPaused }
+            )
 
             reset()
             _contextHistory.add("system" to systemPrompt)
             pauseFlow = isPausedFlow
 
             // First step with user prompt
-            AppLogger.d("PhoneAgent", "[$agentId] run: starting first step for task='$task', hasShowerDisplayAtStart=$hasShowerDisplayAtStart")
+            AppLogger.d("PhoneAgent", "[$agentId] run: starting first step for task='$task'")
             awaitIfPaused()
             var result = _executeStep(task, isFirst = true)
             val firstAction = result.action
@@ -448,54 +237,7 @@ class PhoneAgent(
                 else -> context.getString(R.string.phone_agent_thinking)
             }
 
-            if (!useShowerUi) {
-                val hasShowerNow = hasShowerDisplay("Error re-checking Shower virtual display state after first step")
-
-                if (shouldUseShowerUi(hasShowerNow)) {
-                    useShowerUi = true
-                    try {
-                        progressOverlay.hide()
-                    } catch (_: Exception) {
-                    }
-
-                    try {
-                        showerOverlay = VirtualDisplayOverlay.getInstance(context, agentId)
-                    } catch (e: Exception) {
-                        AppLogger.e("PhoneAgent", "[$agentId] Error getting VirtualDisplayOverlay instance when switching (first step)", e)
-                        showerOverlay = null
-                    }
-
-                    if (showerOverlay != null) {
-                        useShowerIndicatorForAgent(context, agentId)
-                        showerOverlay?.showAutomationControls(
-                            totalSteps = config.maxSteps,
-                            initialStatus = firstStatusText,
-                            onTogglePauseResume = { isPaused -> pausedMutable?.value = isPaused },
-                            onExit = {
-                                PhoneAgentJobRegistry.cancelAgent(agentId, "User cancelled UI automation")
-                                job?.cancel(CancellationException("User cancelled UI automation"))
-                            }
-                        )
-                        showerOverlay?.updateAutomationProgress(stepCount, config.maxSteps, firstStatusText)
-                    } else {
-                        progressOverlay.show(
-                            config.maxSteps,
-                            "Thinking...",
-                            onCancel = {
-                                PhoneAgentJobRegistry.cancelAgent(agentId, "User cancelled UI automation")
-                                job?.cancel(CancellationException("User cancelled UI automation"))
-                            },
-                            onToggleTakeOver = { isPaused -> pausedMutable?.value = isPaused }
-                        )
-                        progressOverlay.updateProgress(stepCount, config.maxSteps, firstStatusText)
-                        useShowerUi = false
-                    }
-                } else {
-                    progressOverlay.updateProgress(stepCount, config.maxSteps, firstStatusText)
-                }
-            } else {
-                showerOverlay?.updateAutomationProgress(stepCount, config.maxSteps, firstStatusText)
-            }
+            progressOverlay.updateProgress(stepCount, config.maxSteps, firstStatusText)
 
             onStep?.invoke(result)
 
@@ -517,44 +259,7 @@ class PhoneAgent(
                     else -> context.getString(R.string.phone_agent_thinking)
                 }
 
-                if (!useShowerUi) {
-                    val hasShowerNow = hasShowerDisplay("Error re-checking Shower state in loop")
-
-                    if (shouldUseShowerUi(hasShowerNow)) {
-                        useShowerUi = true
-                        progressOverlay.hide()
-                        showerOverlay = VirtualDisplayOverlay.getInstance(context, agentId)
-                        if (showerOverlay != null) {
-                            useShowerIndicatorForAgent(context, agentId)
-                            showerOverlay?.showAutomationControls(
-                                totalSteps = config.maxSteps,
-                                initialStatus = statusText,
-                                onTogglePauseResume = { isPaused -> pausedMutable?.value = isPaused },
-                                onExit = {
-                                    PhoneAgentJobRegistry.cancelAgent(agentId, "User cancelled UI automation")
-                                    job?.cancel(CancellationException("User cancelled UI automation"))
-                                }
-                            )
-                            showerOverlay?.updateAutomationProgress(stepCount, config.maxSteps, statusText)
-                        } else {
-                            progressOverlay.show(
-                                config.maxSteps,
-                                "Thinking...",
-                                onCancel = {
-                                    PhoneAgentJobRegistry.cancelAgent(agentId, "User cancelled UI automation")
-                                    job?.cancel(CancellationException("User cancelled UI automation"))
-                                },
-                                onToggleTakeOver = { isPaused -> pausedMutable?.value = isPaused }
-                            )
-                            progressOverlay.updateProgress(stepCount, config.maxSteps, statusText)
-                            useShowerUi = false
-                        }
-                    } else {
-                        progressOverlay.updateProgress(stepCount, config.maxSteps, statusText)
-                    }
-                } else {
-                    showerOverlay?.updateAutomationProgress(stepCount, config.maxSteps, statusText)
-                }
+                progressOverlay.updateProgress(stepCount, config.maxSteps, statusText)
 
                 onStep?.invoke(result)
 
@@ -573,22 +278,7 @@ class PhoneAgent(
             } else {
                 clearAgentIndicators(context, agentId)
             }
-            if (useShowerUi) {
-                showerOverlay?.hideAutomationControls()
-            } else {
-                progressOverlay.hide()
-            }
-            if (cleanupOnFinish) {
-                AppLogger.d("PhoneAgent", "[$agentId] run: cleaning up agent session")
-                try {
-                    VirtualDisplayOverlay.hide(agentId)
-                } catch (_: Exception) {
-                }
-                try {
-                    ShowerController.shutdown(agentId)
-                } catch (_: Exception) {
-                }
-            }
+            progressOverlay.hide()
         }
     }
 
@@ -734,26 +424,8 @@ private suspend fun useFullscreenStatusIndicatorForAgent(context: Context, agent
     }
 }
 
-private suspend fun useShowerIndicatorForAgent(context: Context, agentId: String) {
-    UIAutomationProgressOverlay.getInstance(context).setBorderEnabled(false)
-    try {
-        val overlay = VirtualDisplayOverlay.getInstance(context, agentId)
-        overlay.setShowerBorderVisible(true)
-    } catch (e: Exception) {
-        AppLogger.e("PhoneAgent", "[$agentId] Error enabling Shower border indicator", e)
-    }
-    val floatingService = FloatingChatService.getInstance()
-    floatingService?.setStatusIndicatorVisible(false)
-}
-
 private suspend fun clearAgentIndicators(context: Context, agentId: String) {
     UIAutomationProgressOverlay.getInstance(context).setBorderEnabled(false)
-    try {
-        val overlay = VirtualDisplayOverlay.getInstance(context, agentId)
-        overlay.setShowerBorderVisible(false)
-    } catch (e: Exception) {
-        AppLogger.e("PhoneAgent", "[$agentId] Error disabling Shower border indicator", e)
-    }
     val floatingService = FloatingChatService.getInstance()
     floatingService?.setStatusIndicatorVisible(false)
 }
@@ -766,16 +438,11 @@ class ActionHandler(
     private val toolImplementations: ToolImplementations
 ) {
     private var agentId: String = "default"
-    private var mainScreenShowerPrepared: Boolean = false
     private var appPackagesSyncedFromTool = false
     private val aiToolManager: AIToolHandler by lazy { AIToolHandler.getInstance(context) }
 
     fun setAgentId(id: String) {
         agentId = id
-    }
-
-    fun setMainScreenShowerPrepared(prepared: Boolean) {
-        mainScreenShowerPrepared = prepared
     }
 
     data class ActionExecResult(
@@ -789,42 +456,9 @@ class ActionHandler(
         private const val POST_NON_WAIT_ACTION_DELAY_MS = 500L
     }
 
-    private data class ShowerUsageContext(
-        val isAdbOrHigher: Boolean,
-        val showerDisplayId: Int?
-    ) {
-        val hasShowerDisplay: Boolean get() = showerDisplayId != null
-        val canUseShowerForInput: Boolean get() = isAdbOrHigher && showerDisplayId != null
-    }
-
     private fun isMainScreenAgent(): Boolean = agentId.isBlank() || agentId == "default"
 
-    private fun resolveShowerUsageContext(): ShowerUsageContext {
-        if (isMainScreenAgent()) {
-            return ShowerUsageContext(
-                isAdbOrHigher = mainScreenShowerPrepared,
-                showerDisplayId = if (mainScreenShowerPrepared) 0 else null
-            )
-        }
-        val permissionState = resolvePrivilegedExecutionState(
-            context = context,
-            androidPermissionPreferences = androidPermissionPreferences,
-            checkDebuggerShizuku = false,
-            onExperimentalFlagReadError = { e ->
-                AppLogger.e("ActionHandler", "[$agentId] Error reading experimental virtual display flag", e)
-            }
-        )
-        val showerId = try {
-            ShowerController.getDisplayId(agentId)
-        } catch (e: Exception) {
-            AppLogger.e("ActionHandler", "[$agentId] Error getting Shower display id", e)
-            null
-        }
-        return ShowerUsageContext(isAdbOrHigher = permissionState.isAdbOrHigher, showerDisplayId = showerId)
-    }
-
     suspend fun captureScreenshotForAgent(): String? {
-        val showerCtx = resolveShowerUsageContext()
         val floatingService = FloatingChatService.getInstance()
         val progressOverlay = UIAutomationProgressOverlay.getInstance(context)
 
@@ -837,33 +471,17 @@ class ActionHandler(
             progressOverlay.setOverlayVisible(false)
             delay(200)
 
-            if (showerCtx.canUseShowerForInput) {
-                val (link, dims) = captureScreenshotViaShower()
-                screenshotLink = link
-                dimensions = dims
-            }
+            val screenshotTool = buildScreenshotTool()
+            val (bitmap, fallbackDims) = toolImplementations.captureScreenshotBitmap(screenshotTool)
 
-            if (screenshotLink == null) {
-                val screenshotTool = buildScreenshotTool()
-                val (bitmap, fallbackDims) = toolImplementations.captureScreenshotBitmap(screenshotTool)
-
-                if (bitmap != null) {
-                    val (compressedLink, rawDims) = saveCompressedScreenshotFromBitmap(bitmap)
-                    screenshotLink = compressedLink
-                    dimensions = fallbackDims ?: rawDims
-                    bitmap.recycle()
-                }
+            if (bitmap != null) {
+                val (compressedLink, rawDims) = saveCompressedScreenshotFromBitmap(bitmap)
+                screenshotLink = compressedLink
+                dimensions = fallbackDims ?: rawDims
+                bitmap.recycle()
             }
         } finally {
-            val hasShowerDisplayNow = try {
-                ShowerController.getDisplayId(agentId) != null
-            } catch (e: Exception) {
-                AppLogger.e("ActionHandler", "[$agentId] Error checking Shower display state in finally", e)
-                false
-            }
-            if (isMainScreenAgent() || !hasShowerDisplayNow) {
-                floatingService?.setStatusIndicatorVisible(true)
-            }
+            floatingService?.setStatusIndicatorVisible(true)
             progressOverlay.setOverlayVisible(true)
         }
 
@@ -879,34 +497,6 @@ class ActionHandler(
             name = "capture_screenshot",
             parameters = emptyList()
         )
-    }
-
-    private suspend fun captureScreenshotViaShower(): Pair<String?, Pair<Int, Int>?> {
-        return try {
-            val pngBytes = if (isMainScreenAgent()) {
-                ShowerController.requestScreenshot(agentId)
-            } else {
-                VirtualDisplayOverlay.getInstance(context, agentId).captureCurrentFramePng()
-            }
-            if (pngBytes == null || pngBytes.isEmpty()) {
-                AppLogger.w("ActionHandler", "[$agentId] Shower WS screenshot returned no data")
-                Pair(null, null)
-            } else {
-                val bitmap = BitmapFactory.decodeByteArray(pngBytes, 0, pngBytes.size)
-                if (bitmap == null) {
-                    AppLogger.e("ActionHandler", "[$agentId] Shower screenshot: failed to decode bytes")
-                    Pair(null, null)
-                } else {
-                    val result = saveCompressedScreenshotFromBitmap(bitmap)
-                    bitmap.recycle()
-                    result
-                }
-            }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            AppLogger.e("ActionHandler", "[$agentId] Shower screenshot failed", e)
-            Pair(null, null)
-        }
     }
 
     private fun saveCompressedScreenshotFromBitmap(bitmap: Bitmap): Pair<String?, Pair<Int, Int>?> {
@@ -961,7 +551,6 @@ class ActionHandler(
         val actionName = parsed.actionName ?: return fail(message = "Missing action name")
         val fields = parsed.fields
 
-        val showerCtx = resolveShowerUsageContext()
         return when (actionName) {
             "Launch" -> {
                 val app = fields["app"]?.takeIf { it.isNotBlank() } ?: return fail(message = "No app name specified for Launch")
@@ -975,53 +564,14 @@ class ActionHandler(
                         return fail(shouldFinish = true, message = context.getString(R.string.phone_agent_shizuku_unavailable))
                     }
 
-                    if (showerCtx.isAdbOrHigher && !isMainScreenAgent()) {
-                        val pm = context.packageManager
-                        val hasLaunchableTarget = pm.getLaunchIntentForPackage(packageName) != null
-                        ensureVirtualDisplayIfAdbOrHigher()
-
-                        val metrics = context.resources.displayMetrics
-                        val width = metrics.widthPixels
-                        val height = metrics.heightPixels
-                        val dpi = metrics.densityDpi
-                        val bitrateKbps = try {
-                            DisplayPreferencesManager.getInstance(context).getVirtualDisplayBitrateKbps()
-                        } catch (e: Exception) { 3000 }
-
-                        val created = ShowerController.ensureDisplay(agentId, context, width, height, dpi, bitrateKbps = bitrateKbps)
-                        val launched = if (created && hasLaunchableTarget) ShowerController.launchApp(agentId, packageName) else false
-
-                        if (created && launched) {
-                            try {
-                                VirtualDisplayOverlay.getInstance(context, agentId).updateCurrentAppPackageName(packageName)
-                            } catch (_: Exception) {}
-                            useShowerIndicatorForAgent(context, agentId)
-                            delay(POST_LAUNCH_DELAY_MS)
-                            ok()
-                        } else {
-                            val desktopPackage = "com.ai.assistance.operit.desktop"
-                            val desktopLaunched = ShowerController.launchApp(agentId, desktopPackage)
-                            if (desktopLaunched) {
-                                try {
-                                    VirtualDisplayOverlay.getInstance(context, agentId).updateCurrentAppPackageName(desktopPackage)
-                                } catch (_: Exception) {}
-                                useShowerIndicatorForAgent(context, agentId)
-                                delay(POST_LAUNCH_DELAY_MS)
-                                ok()
-                            } else {
-                                fail(message = "Failed to launch on Shower virtual display")
-                            }
-                        }
+                    val result = aiToolManager.executeTool(
+                        AITool("start_app", listOf(ToolParameter("package_name", packageName)))
+                    )
+                    if (result.success) {
+                        delay(POST_LAUNCH_DELAY_MS)
+                        ok()
                     } else {
-                        val result = aiToolManager.executeTool(
-                            AITool("start_app", listOf(ToolParameter("package_name", packageName)))
-                        )
-                        if (result.success) {
-                            delay(POST_LAUNCH_DELAY_MS)
-                            ok()
-                        } else {
-                            fail(message = result.error ?: "Failed to launch app: $packageName")
-                        }
+                        fail(message = result.error ?: "Failed to launch app: $packageName")
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
@@ -1031,56 +581,20 @@ class ActionHandler(
             "Tap" -> {
                 val element = fields["element"] ?: return fail(message = "No element for Tap")
                 val (x, y) = parseRelativePoint(element) ?: return fail(message = "Invalid coordinates for Tap: $element")
-                val exec = withAgentUiHiddenForAction(showerCtx) {
-                    if (showerCtx.canUseShowerForInput) {
-                        val okTap = ShowerController.tap(agentId, x, y)
-                        if (okTap) ok() else fail(message = "Shower TAP failed at ($x,$y)")
-                    } else {
-                        val params = withDisplayParam(listOf(ToolParameter("x", x.toString()), ToolParameter("y", y.toString())))
-                        val result = toolImplementations.tap(AITool("tap", params))
-                        if (result.success) ok() else fail(message = result.error ?: "Tap failed")
-                    }
+                val exec = withAgentUiHiddenForAction {
+                    val params = listOf(ToolParameter("x", x.toString()), ToolParameter("y", y.toString()))
+                    val result = toolImplementations.tap(AITool("tap", params))
+                    if (result.success) ok() else fail(message = result.error ?: "Tap failed")
                 }
                 if (exec.success && !exec.shouldFinish) delay(POST_NON_WAIT_ACTION_DELAY_MS)
                 exec
             }
             "Type" -> {
                 val text = fields["text"] ?: ""
-                val exec = withAgentUiHiddenForAction(showerCtx) {
-                    if (showerCtx.canUseShowerForInput) {
-                        try {
-                            var cleared = false
-                            val selectedAll = ShowerController.keyWithMeta(agentId, KeyEvent.KEYCODE_A, KeyEvent.META_CTRL_ON)
-                            if (selectedAll) {
-                                delay(80)
-                                cleared = ShowerController.key(agentId, KeyEvent.KEYCODE_DEL)
-                            }
-                            if (!cleared) {
-                                cleared = ShowerController.key(agentId, KeyEvent.KEYCODE_CLEAR)
-                            }
-                            if (!cleared) {
-                                ShowerController.key(agentId, KeyEvent.KEYCODE_MOVE_END)
-                                repeat(200) {
-                                    ShowerController.key(agentId, KeyEvent.KEYCODE_DEL)
-                                }
-                            }
-                            delay(300)
-                            if (text.isEmpty()) return@withAgentUiHiddenForAction ok()
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                ?: return@withAgentUiHiddenForAction fail(message = "Clipboard unavailable")
-                            clipboard.setPrimaryClip(ClipData.newPlainText("operit_input", text))
-                            delay(100)
-                            val pasted = ShowerController.key(agentId, KeyEvent.KEYCODE_PASTE)
-                            if (pasted) ok() else fail(message = "Shower PASTE failed")
-                        } catch (e: Exception) {
-                            if (e is CancellationException) throw e
-                            fail(message = "Error typing via Shower: ${e.message}")
-                        }
-                    } else {
-                        val params = withDisplayParam(listOf(ToolParameter("text", text)))
-                        val result = toolImplementations.setInputText(AITool("set_input_text", params))
-                        if (result.success) ok() else fail(message = result.error ?: "Type failed")
-                    }
+                val exec = withAgentUiHiddenForAction {
+                    val params = listOf(ToolParameter("text", text))
+                    val result = toolImplementations.setInputText(AITool("set_input_text", params))
+                    if (result.success) ok() else fail(message = result.error ?: "Type failed")
                 }
                 if (exec.success && !exec.shouldFinish) delay(POST_NON_WAIT_ACTION_DELAY_MS)
                 exec
@@ -1090,46 +604,31 @@ class ActionHandler(
                 val end = fields["end"] ?: return fail(message = "Missing swipe end")
                 val (sx, sy) = parseRelativePoint(start) ?: return fail(message = "Invalid swipe start")
                 val (ex, ey) = parseRelativePoint(end) ?: return fail(message = "Invalid swipe end")
-                val exec = withAgentUiHiddenForAction(showerCtx) {
-                    if (showerCtx.canUseShowerForInput) {
-                        val okSwipe = ShowerController.swipe(agentId, sx, sy, ex, ey)
-                        if (okSwipe) ok() else fail(message = "Shower SWIPE failed")
-                    } else {
-                        val params = withDisplayParam(listOf(
-                            ToolParameter("start_x", sx.toString()), ToolParameter("start_y", sy.toString()),
-                            ToolParameter("end_x", ex.toString()), ToolParameter("end_y", ey.toString())
-                        ))
-                        val result = toolImplementations.swipe(AITool("swipe", params))
-                        if (result.success) ok() else fail(message = result.error ?: "Swipe failed")
-                    }
+                val exec = withAgentUiHiddenForAction {
+                    val params = listOf(
+                        ToolParameter("start_x", sx.toString()), ToolParameter("start_y", sy.toString()),
+                        ToolParameter("end_x", ex.toString()), ToolParameter("end_y", ey.toString())
+                    )
+                    val result = toolImplementations.swipe(AITool("swipe", params))
+                    if (result.success) ok() else fail(message = result.error ?: "Swipe failed")
                 }
                 if (exec.success && !exec.shouldFinish) delay(POST_NON_WAIT_ACTION_DELAY_MS)
                 exec
             }
             "Back" -> {
-                val exec = withAgentUiHiddenForAction(showerCtx) {
-                    if (showerCtx.canUseShowerForInput) {
-                        val okKey = ShowerController.key(agentId, KeyEvent.KEYCODE_BACK)
-                        if (okKey) ok() else fail(message = "Shower BACK failed")
-                    } else {
-                        val params = withDisplayParam(listOf(ToolParameter("key_code", "KEYCODE_BACK")))
-                        val result = toolImplementations.pressKey(AITool("press_key", params))
-                        if (result.success) ok() else fail(message = result.error ?: "Back failed")
-                    }
+                val exec = withAgentUiHiddenForAction {
+                    val params = listOf(ToolParameter("key_code", "KEYCODE_BACK"))
+                    val result = toolImplementations.pressKey(AITool("press_key", params))
+                    if (result.success) ok() else fail(message = result.error ?: "Back failed")
                 }
                 if (exec.success && !exec.shouldFinish) delay(POST_NON_WAIT_ACTION_DELAY_MS)
                 exec
             }
             "Home" -> {
-                val exec = withAgentUiHiddenForAction(showerCtx) {
-                    if (showerCtx.canUseShowerForInput) {
-                        val okKey = ShowerController.key(agentId, KeyEvent.KEYCODE_HOME)
-                        if (okKey) ok() else fail(message = "Shower HOME failed")
-                    } else {
-                        val params = withDisplayParam(listOf(ToolParameter("key_code", "KEYCODE_HOME")))
-                        val result = toolImplementations.pressKey(AITool("press_key", params))
-                        if (result.success) ok() else fail(message = result.error ?: "Home failed")
-                    }
+                val exec = withAgentUiHiddenForAction {
+                    val params = listOf(ToolParameter("key_code", "KEYCODE_HOME"))
+                    val result = toolImplementations.pressKey(AITool("press_key", params))
+                    if (result.success) ok() else fail(message = result.error ?: "Home failed")
                 }
                 if (exec.success && !exec.shouldFinish) delay(POST_NON_WAIT_ACTION_DELAY_MS)
                 exec
@@ -1145,12 +644,8 @@ class ActionHandler(
     }
 
     private suspend fun withAgentUiHiddenForAction(
-        showerCtx: ShowerUsageContext,
         block: suspend () -> ActionExecResult
     ): ActionExecResult {
-        val shouldHideUiDuringAction = isMainScreenAgent() || !showerCtx.canUseShowerForInput
-        if (!shouldHideUiDuringAction) return block()
-
         val floatingService = FloatingChatService.getInstance()
         val progressOverlay = UIAutomationProgressOverlay.getInstance(context)
         try {
@@ -1162,55 +657,9 @@ class ActionHandler(
             return block()
         } finally {
             if (isMainScreenAgent()) {
-                val hasShowerDisplayNow = try {
-                    ShowerController.getDisplayId(agentId) != null
-                } catch (e: Exception) {
-                    AppLogger.e("ActionHandler", "[$agentId] Error checking Shower display state after action", e)
-                    false
-                }
-                if (isMainScreenAgent() || !hasShowerDisplayNow) {
-                    floatingService?.setStatusIndicatorVisible(true)
-                }
+                floatingService?.setStatusIndicatorVisible(true)
             }
             progressOverlay.setOverlayVisible(true)
-        }
-    }
-
-    private suspend fun ensureVirtualDisplayIfAdbOrHigher() {
-        if (isMainScreenAgent()) return
-        try {
-            val permissionState = resolvePrivilegedExecutionState(
-                context = context,
-                androidPermissionPreferences = androidPermissionPreferences,
-                checkDebuggerShizuku = false
-            )
-            if (!permissionState.isAdbOrHigher) return
-
-            val ok = ShowerServerManager.ensureServerStarted(context)
-            if (ok) {
-                try {
-                    VirtualDisplayOverlay.getInstance(context, agentId).show(0)
-                } catch (e: Exception) {
-                    AppLogger.e("ActionHandler", "[$agentId] Error showing Shower overlay", e)
-                }
-            }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            AppLogger.e("ActionHandler", "[$agentId] Error ensuring Shower", e)
-        }
-    }
-
-    private fun withDisplayParam(params: List<ToolParameter>): List<ToolParameter> {
-        if (isMainScreenAgent()) return params
-        return try {
-            val showerId = ShowerController.getDisplayId(agentId)
-            if (showerId != null) {
-                params + ToolParameter("display", showerId.toString())
-            } else {
-                params
-            }
-        } catch (e: Exception) {
-            params
         }
     }
 
