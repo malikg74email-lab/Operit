@@ -37,16 +37,16 @@ object SpeechServiceFactory {
     fun createWakeSpeechService(
         context: Context,
     ): SpeechService {
-        val profiles = SpeechServiceProfilesPreferences(context)
-        val profile = runBlocking { profiles.getCurrentSttProfile() }
-        val selectedType = profile.serviceType
-        val effectiveType = when (selectedType) {
-            SpeechServiceType.OPENAI_STT,
-            SpeechServiceType.DEEPGRAM_STT,
-            -> SpeechServiceType.SHERPA_NCNN
-            else -> selectedType
-        }
-        return createSpeechService(context, effectiveType, profile.httpConfig)
+        // Shaheen 3 wake productisation: this factory used to coerce cloud STT
+        // profiles (OPENAI_STT / DEEPGRAM_STT) to SHERPA_NCNN for wake listening.
+        // Strip Wave 1 removed the sherpa-ncnn model assets from the APK, so the
+        // coerced provider could never initialise and STT wake silently never
+        // worked. The coercion is removed: wake now builds the STT service from
+        // the user's actual current profile, exactly like the cascade path
+        // (createSpeechService). The default wake engine is the personal template
+        // (see WakeWordPreferences.DEFAULT_WAKE_RECOGNITION_MODE); this service is
+        // used only when the owner explicitly selects STT wake mode.
+        return createSpeechService(context)
     }
 
     fun createSpeechService(
