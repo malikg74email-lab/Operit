@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -726,7 +727,9 @@ class GeminiLiveVoiceProvider(
         playbackGeneration.incrementAndGet()
 
         val track = audioTrack ?: return
-        if (track.playbackState == AudioTrack.PLAYSTATE_PLAYING) {
+        // AudioTrack's state getter is getPlayState() (property playState); there is
+        // no getPlaybackState() on AudioTrack — using it fails compilation (CI #124).
+        if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
             track.pause()
             track.flush()
             track.play()
@@ -742,7 +745,7 @@ class GeminiLiveVoiceProvider(
         val track = audioTrack
         audioTrack = null
         if (track != null) {
-            if (track.playbackState == AudioTrack.PLAYSTATE_PLAYING) {
+            if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
                 track.stop()
             }
             track.release()
