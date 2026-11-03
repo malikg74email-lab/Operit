@@ -147,7 +147,13 @@ open class StandardFileSystemTools(protected val context: Context) {
 
     /** 检查是否是Linux环境 */
     protected fun isLinuxEnvironment(environment: String?): Boolean {
-        return environment?.lowercase() == "linux"
+        // Shaheen 3 strip wave 6 (surface-only, STRIP_PLAN Target 4 Option A):
+        // the Linux-environment variant of the file toolset is unregistered, so
+        // this always returns false and every file operation takes the Android /
+        // SAF path. LinuxFileSystemTools stays compiled and dormant (the
+        // :terminal engine is kept for local MCP deployment + coding mode);
+        // restore the environment check to re-enable.
+        return false
     }
 
     protected data class GrepContextCandidate(
