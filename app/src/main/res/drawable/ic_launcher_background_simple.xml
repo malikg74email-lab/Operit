@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Shaheen 3: midnight-navy background matching the falcon artwork (#001124 sampled from the master). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#FFFFFFFF" />
+    <solid android:color="#001124" />
 </shape>
