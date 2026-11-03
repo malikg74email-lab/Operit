@@ -62,7 +62,10 @@ class WakeWordPreferences(private val context: Context) {
 
         const val DEFAULT_WAKE_PHRASE_REGEX_ENABLED = false
         const val DEFAULT_ALWAYS_LISTENING_ENABLED = false
-        const val DEFAULT_WAKE_RECOGNITION_MODE = "stt"
+        // Shaheen 3 wake productisation: the personal template is the default wake
+        // engine. The STT wake path's local model was removed in strip Wave 1, so an
+        // "stt" default could never initialise a wake recognizer.
+        const val DEFAULT_WAKE_RECOGNITION_MODE = "personal_template"
         const val DEFAULT_VOICE_CALL_INACTIVITY_TIMEOUT_SECONDS = 5
         const val DEFAULT_WAKE_GREETING_ENABLED = true
 
