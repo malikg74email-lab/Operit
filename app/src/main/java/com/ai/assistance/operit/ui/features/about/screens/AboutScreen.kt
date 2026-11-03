@@ -58,7 +58,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
-private const val GITHUB_PROJECT_URL = "https://github.com/AAswordman/Operit"
+// Shaheen 3: project link points at this build's own fork, not upstream Operit.
+private const val GITHUB_PROJECT_URL = "https://github.com/malikg74email-lab/Operit"
 
 private enum class PatchUpdatePhase {
     SELECTING_MIRROR,
