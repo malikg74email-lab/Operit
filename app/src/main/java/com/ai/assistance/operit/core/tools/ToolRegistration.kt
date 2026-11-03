@@ -277,107 +277,12 @@ fun registerAllTools(handler: AIToolHandler, context: Context) {
             }
     )
 
-    // 终端命令执行工具 - 一次性收集输出
-    handler.registerTool(
-            name = "create_terminal_session",
-            descriptionGenerator = { tool ->
-                val sessionName = tool.parameters.find { it.name == "session_name" }?.value
-                val displayName = sessionName ?: s(R.string.toolreg_unnamed)
-                s(R.string.toolreg_create_terminal_session_desc, displayName)
-            },
-            executor = { tool ->
-                val terminalTool = ToolGetter.getTerminalCommandExecutor(context)
-                terminalTool.createOrGetSession(tool)
-            }
-    )
-
-    handler.registerTool(
-            name = "execute_in_terminal_session",
-            descriptionGenerator = { tool ->
-                val command = tool.parameters.find { it.name == "command" }?.value ?: ""
-                val sessionId = tool.parameters.find { it.name == "session_id" }?.value
-                s(R.string.toolreg_execute_in_terminal_session_desc, sessionId ?: "", command)
-            },
-            executor = { tool ->
-                val terminalTool = ToolGetter.getTerminalCommandExecutor(context)
-                terminalTool.executeCommandInSession(tool)
-            }
-    )
-
-    handler.registerTool(
-            name = "execute_in_terminal_session_streaming",
-            descriptionGenerator = { tool ->
-                val command = tool.parameters.find { it.name == "command" }?.value ?: ""
-                val sessionId = tool.parameters.find { it.name == "session_id" }?.value
-                s(R.string.toolreg_execute_in_terminal_session_desc, sessionId ?: "", command)
-            },
-            executor =
-                    object : ToolExecutor {
-                        override fun invoke(tool: AITool): ToolResult {
-                            val terminalTool = ToolGetter.getTerminalCommandExecutor(context)
-                            return terminalTool.executeCommandInSession(tool)
-                        }
-
-                        override fun invokeAndStream(
-                                tool: AITool
-                        ): kotlinx.coroutines.flow.Flow<ToolResult> {
-                            val terminalTool = ToolGetter.getTerminalCommandExecutor(context)
-                            return terminalTool.executeCommandInSessionStream(tool)
-                        }
-                    }
-    )
-
-    handler.registerTool(
-            name = "execute_hidden_terminal_command",
-            descriptionGenerator = { tool ->
-                val command = tool.parameters.find { it.name == "command" }?.value ?: ""
-                val executorKey =
-                        tool.parameters.find { it.name == "executor_key" }?.value ?: "default"
-                s(R.string.toolreg_execute_hidden_terminal_command_desc, executorKey, command)
-            },
-            executor = { tool ->
-                val terminalTool = ToolGetter.getTerminalCommandExecutor(context)
-                terminalTool.executeHiddenCommand(tool)
-            }
-    )
-
-    handler.registerTool(
-            name = "close_terminal_session",
-            descriptionGenerator = { tool ->
-                val sessionId = tool.parameters.find { it.name == "session_id" }?.value
-                s(R.string.toolreg_close_terminal_session_desc, sessionId ?: "")
-            },
-            executor = { tool ->
-                val terminalTool = ToolGetter.getTerminalCommandExecutor(context)
-                terminalTool.closeSession(tool)
-            }
-    )
-
-    handler.registerTool(
-            name = "input_in_terminal_session",
-            descriptionGenerator = { tool ->
-                val sessionId = tool.parameters.find { it.name == "session_id" }?.value
-                val control = tool.parameters.find { it.name == "control" }?.value ?: "-"
-                s(R.string.toolreg_input_in_terminal_session_desc, sessionId ?: "", control)
-            },
-            executor = { tool ->
-                val terminalTool = ToolGetter.getTerminalCommandExecutor(context)
-                terminalTool.inputInSession(tool)
-            }
-    )
-
-    handler.registerTool(
-            name = "get_terminal_session_screen",
-            descriptionGenerator = { tool ->
-                val sessionId = tool.parameters.find { it.name == "session_id" }?.value ?: ""
-                s(R.string.toolreg_get_terminal_session_screen_desc, sessionId)
-            },
-            executor = { tool ->
-                val terminalTool = ToolGetter.getTerminalCommandExecutor(context)
-                terminalTool.getSessionScreen(tool)
-            }
-    )
-
+    // Shaheen 3 strip wave 6: terminal tools unregistered (surface-only strip,
+    // STRIP_PLAN Target 4 Option A). The 7 terminal-session tools
+    // (create/execute/execute-streaming/hidden/input/close/screen) are no longer
+    // registered; StandardTerminalCommandExecutor and the :terminal engine stay
+    // compiled and dormant because local MCP deployment runs inside the PRoot
+    // environment and the coding-mode phase may re-register them.
     // 音乐播放工具
     val musicPlaybackTools = ToolGetter.getMusicPlaybackTools(context)
 
