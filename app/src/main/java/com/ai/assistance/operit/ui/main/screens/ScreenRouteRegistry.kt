@@ -133,10 +133,12 @@ object ScreenRouteRegistry {
                 icon = NavItem.MemoryBase.icon,
                 order = 30
             ),
+            // Shaheen 2 strip wave 2: Packages hidden from navigation UI (no surface).
+            // Route + launchNavItem stay registered so deep paths (e.g. chat -> package
+            // manager) still resolve; the screen is simply no longer offered.
             hostEntryDefinition(
                 entryId = "main.packages",
                 screen = Screen.Packages,
-                surface = NavigationSurface.MAIN_SIDEBAR_TOOLS,
                 launchNavItem = NavItem.Packages,
                 icon = NavItem.Packages.icon,
                 order = 10
@@ -149,10 +151,12 @@ object ScreenRouteRegistry {
                 icon = NavItem.ShizukuCommands.icon,
                 order = 20
             ),
+            // Shaheen 2 strip wave 2: Workflow hidden from navigation UI (no surface).
+            // Route + launchNavItem stay registered; the workflow engine keeps running
+            // headlessly, only the editor surface is no longer offered.
             hostEntryDefinition(
                 entryId = "main.workflow",
                 screen = Screen.Workflow,
-                surface = NavigationSurface.MAIN_SIDEBAR_TOOLS,
                 launchNavItem = NavItem.Workflow,
                 icon = NavItem.Workflow.icon,
                 order = 30
