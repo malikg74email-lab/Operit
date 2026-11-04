@@ -552,13 +552,13 @@ val signRotatedNightlyApk by tasks.registering {
     }
 }
 
-tasks.matching { it.name == "assembleRelease" }.configureEach {
-    finalizedBy(signRotatedReleaseApk)
-}
-
-tasks.matching { it.name == "assembleNightly" }.configureEach {
-    finalizedBy(signRotatedNightlyApk)
-}
+// Shaheen 3: upstream's rotation-signing finalizers are NOT wired here.
+// They require the upstream maintainers' RELEASE_*/APK_ROTATION_* key
+// properties and an already-signed app-release.apk; this fork builds the
+// release UNSIGNED and signs locally with Malik's dedicated key, so the
+// finalizer could only fail (run #141: "APK to sign was not produced:
+// .../app-release.apk"). The signRotated*Apk tasks stay registered above
+// for manual use with a full rotation config.
 
 tasks.named("preBuild") {
     dependsOn(syncMainAssets)
