@@ -884,6 +884,7 @@ class AIForegroundService : Service() {
     /** Owner intent: true from an accepted call start until finishLiveCall runs. */
     @Volatile
     private var liveCallWanted: Boolean = false
+    private var liveSessionActivated = false
 
     /** The single resume attempt granted to each call (see handleLiveSessionDrop). */
     @Volatile
@@ -1049,6 +1050,7 @@ class AIForegroundService : Service() {
             return
         }
         liveCallWanted = true
+        liveSessionActivated = false
         liveResumeUsed = false
         liveSessionJob = serviceScope.launch {
             try {
@@ -1135,6 +1137,9 @@ class AIForegroundService : Service() {
                         }
                     }
                     else -> {
+                        // A live state (Connecting..Paused): the session truly
+                        // started — v1.0.2's finishLiveCall check reads this.
+                        liveSessionActivated = true
                         liveCallStateFlow.value = state
                         refreshServiceNotification()
                     }
@@ -1225,13 +1230,18 @@ class AIForegroundService : Service() {
         liveRecoveryJob?.cancel()
         liveRecoveryJob = null
         teardownLiveCallResources()
-        // Shaheen 3 v1.0.1: never publish a cancellation as the call's
-        // terminal error — a cancelled call simply ends. (On device
-        // 2026-11-04 the raw "... was cancelled" text was shown as the
-        // call error.) finishLiveCall stays the single writer.
+        // Shaheen 3 v1.0.2 (narrows v1.0.1): a cancellation is published as a
+        // quiet Ended ONLY when the session had truly started (a live state
+        // was observed) — that was v1.0.1's case, a mid-call system teardown
+        // whose raw "... was cancelled" text reached the call screen on
+        // device 2026-11-04. A start that never activated keeps its Error:
+        // the owner tapped the orb, so the failure must stay on screen in
+        // plain words instead of the orb silently doing nothing.
+        // finishLiveCall stays the single writer of the terminal state.
         liveCallStateFlow.value =
             if (finalState is RealtimeSessionState.Error &&
-                finalState.cause is CancellationException
+                finalState.cause is CancellationException &&
+                liveSessionActivated
             ) {
                 RealtimeSessionState.Ended
             } else {

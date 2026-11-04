@@ -763,10 +763,16 @@ class GeminiLiveVoiceProvider(
     }
 
     private fun failSession(cause: Throwable) {
-        // Shaheen 3 v1.0.1: a cancelled session is NOT an error. The shipped
-        // build surfaced a raw CancellationException (obfuscated "... was
-        // cancelled") on the call screen; cancellation now closes quietly.
-        if (cause is CancellationException) {
+        // Shaheen 3 v1.0.2 (narrows v1.0.1): a cancellation closes quietly ONLY
+        // when it is ours — disconnect() set intentionalClose (owner ended the
+        // call, or the service tore the session down on purpose). A
+        // cancellation that arrives with intentionalClose == false killed a
+        // start or a live session from outside; v1.0.1 swallowed exactly that
+        // case, the session never cleaned up, and every later orb tap was
+        // ignored as "already starting" (device report 2026-11-04: orb taps
+        // did nothing, screen stuck on Sleeping). It now falls through and is
+        // recorded as the session's Error like any other failure.
+        if (cause is CancellationException && intentionalClose) {
             AppLogger.d(TAG, "Gemini Live session cancelled; closing quietly")
             teardownAudio()
             synchronized(stateLock) {
