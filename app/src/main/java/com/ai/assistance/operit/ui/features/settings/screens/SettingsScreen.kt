@@ -23,9 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.ai.assistance.operit.R
 import com.ai.assistance.operit.core.tools.defaultTool.standard.CookiePrivacyManager
 import com.ai.assistance.operit.data.model.FunctionType
-import com.ai.assistance.operit.data.preferences.GitHubAuthPreferences
 import com.ai.assistance.operit.data.repository.ChatHistoryManager
-import com.ai.assistance.operit.ui.features.github.GitHubLoginDialog
 import com.ai.assistance.operit.ui.theme.LocalThemePreferenceSnapshot
 import com.ai.assistance.operit.util.AppLogger
 import kotlinx.coroutines.launch
@@ -58,13 +56,9 @@ fun SettingsScreen(
         navigateToLayoutAdjustmentSettings: () -> Unit
 ) {
         val context = LocalContext.current
-        val githubAuth = remember { GitHubAuthPreferences.getInstance(context) }
         val scope = rememberCoroutineScope()
-        var showGitHubLogin by remember { mutableStateOf(false) }
         var showClearCookieConfirm by remember { mutableStateOf(false) }
 
-        val isGitHubLoggedIn = githubAuth.isLoggedInFlow.collectAsState(initial = false).value
-        val gitHubUser = githubAuth.userInfoFlow.collectAsState(initial = null).value
         // 创建和记住滚动状态，设置为上次保存的位置
         val scrollState = rememberScrollState(SettingsScreenScrollPosition.value)
 
@@ -83,95 +77,17 @@ fun SettingsScreen(
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         }
 
+        // Shaheen v1.1: the owner sees only what he needs — model & key, voice,
+        // permissions, his data. Account login, prompt configuration, persona and
+        // personalization are NOT user settings here: Shaheen configures itself on
+        // the owner's spoken command, so those sections were removed from this
+        // list. Their screens and navigation callbacks remain in the codebase,
+        // simply unlisted; nothing else links to them from Settings.
         Column(
                 modifier = Modifier.fillMaxSize()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .verticalScroll(scrollState)
         ) {
-                // ======= 账号 =======
-                SettingsSection(
-                        title = stringResource(id = R.string.settings_section_account),
-                        icon = Icons.Default.AccountCircle,
-                        containerColor = cardContainerColor
-                ) {
-                        CompactSettingsItem(
-                                title = stringResource(R.string.github_account),
-                                subtitle = if (isGitHubLoggedIn && gitHubUser != null) {
-                                        "@${gitHubUser!!.login}"
-                                } else {
-                                        stringResource(R.string.github_account_not_logged_in)
-                                },
-                                icon = Icons.Default.Person,
-                                onClick = navigateToGitHubAccount
-                        )
-
-                        if (isGitHubLoggedIn) {
-                                CompactSettingsItem(
-                                        title = stringResource(R.string.logout),
-                                        subtitle = stringResource(R.string.github_account_logout_desc),
-                                        icon = Icons.Default.Logout,
-                                        onClick = {
-                                                scope.launch { githubAuth.logout() }
-                                        }
-                                )
-                        } else {
-                                CompactSettingsItem(
-                                        title = stringResource(R.string.login_github),
-                                        subtitle = stringResource(R.string.github_account_login_desc),
-                                        icon = Icons.Default.Login,
-                                        onClick = { showGitHubLogin = true }
-                                )
-                        }
-                }
-
-                if (showGitHubLogin) {
-                        GitHubLoginDialog(
-                                onDismissRequest = { showGitHubLogin = false }
-                        )
-                }
-
-                // ======= 个性化配置 =======
-                SettingsSection(
-                        title = stringResource(id = R.string.settings_section_personalization),
-                        icon = Icons.Default.Person,
-                        containerColor = cardContainerColor
-                ) {
-                        CompactSettingsItem(
-                                title = stringResource(id = R.string.settings_user_preferences),
-                                subtitle = stringResource(id = R.string.settings_user_preferences_subtitle),
-                                icon = Icons.Default.Face,
-                                onClick = navigateToUserPreferences
-                        )
-
-                        CompactSettingsItem(
-                                title = stringResource(R.string.language_settings),
-                                subtitle = stringResource(id = R.string.settings_language_subtitle),
-                                icon = Icons.Default.Language,
-                                onClick = navigateToLanguageSettings
-                        )
-                        
-                        CompactSettingsItem(
-                                title = stringResource(id = R.string.settings_theme_appearance),
-                                subtitle = stringResource(id = R.string.settings_theme_subtitle),
-                                icon = Icons.Default.Palette,
-                                onClick = navigateToThemeSettings
-                        )
-                        
-                        CompactSettingsItem(
-                                title = stringResource(R.string.settings_global_display),
-                                subtitle = stringResource(R.string.settings_global_display_subtitle),
-                                icon = Icons.Default.Visibility,
-                                onClick = navigateToGlobalDisplaySettings
-                        )
-                        
-                        CompactSettingsItem(
-                                title = stringResource(R.string.layout_adjustment),
-                                subtitle = stringResource(R.string.layout_adjustment_subtitle),
-                                icon = Icons.Default.AspectRatio,
-                                onClick = navigateToLayoutAdjustmentSettings
-                        )
-                }
-
                 // ======= AI模型配置 =======
                 SettingsSection(
                         title = stringResource(id = R.string.settings_section_ai_model),
@@ -201,50 +117,6 @@ fun SettingsScreen(
                         
                 }
 
-                // ======= 提示词配置 =======
-                SettingsSection(
-                        title = stringResource(R.string.settings_prompt_section),
-                        icon = Icons.Default.Message,
-                        containerColor = cardContainerColor
-                ) {
-                        CompactSettingsItem(
-                                title = stringResource(R.string.settings_prompt_title),
-                                subtitle = stringResource(id = R.string.settings_system_prompts_subtitle),
-                                icon = Icons.Default.ChatBubble,
-                                onClick = navigateToModelPrompts
-                        )
-                        
-                        // 新增：人设卡生成
-                        CompactSettingsItem(
-                                title = stringResource(R.string.persona_card_generation),
-                                subtitle = stringResource(R.string.persona_card_generation_desc),
-                                icon = Icons.Default.Face,
-                                onClick = navigateToPersonaCardGeneration
-                        )
-                        
-                        // 新增：Waifu模式设置
-                        CompactSettingsItem(
-                                title = stringResource(R.string.waifu_mode_settings),
-                                subtitle = stringResource(R.string.waifu_mode_settings_desc),
-                                icon = Icons.Default.EmojiEmotions,
-                                onClick = navigateToWaifuModeSettings
-                        )
-                }
-
-                // ======= 上下文和总结设置 =======
-                SettingsSection(
-                        title = stringResource(id = R.string.settings_section_context_summary),
-                        icon = Icons.Default.Analytics,
-                        containerColor = cardContainerColor
-                ) {
-                        CompactSettingsItem(
-                                title = stringResource(id = R.string.settings_section_context_summary),
-                                subtitle = stringResource(id = R.string.settings_context_summary_subtitle),
-                                icon = Icons.Default.Tune,
-                                onClick = navigateToContextSummarySettings
-                        )
-                }
-
                 // ======= 数据和权限 =======
                 SettingsSection(
                         title = stringResource(id = R.string.settings_data_permissions),
@@ -272,19 +144,7 @@ fun SettingsScreen(
                                 onClick = navigateToChatHistorySettings
                         )
 
-                        CompactSettingsItem(
-                                title = stringResource(id = R.string.settings_token_usage_stats),
-                                subtitle = stringResource(id = R.string.settings_token_usage_subtitle),
-                                icon = Icons.Default.Analytics,
-                                onClick = navigateToTokenUsageStatistics
-                        )
 
-                        CompactSettingsItem(
-                                title = stringResource(id = R.string.settings_performance_monitor),
-                                subtitle = stringResource(id = R.string.settings_performance_monitor_subtitle),
-                                icon = Icons.Default.Speed,
-                                onClick = navigateToPerformanceMonitor
-                        )
                 }
 
                 // ======= 隐私与数据清理 =======
@@ -298,20 +158,6 @@ fun SettingsScreen(
                                 subtitle = stringResource(id = R.string.settings_clear_cookies_subtitle),
                                 icon = Icons.Default.DeleteSweep,
                                 onClick = { showClearCookieConfirm = true }
-                        )
-                }
-
-                // ======= 外部调用 =======
-                SettingsSection(
-                        title = stringResource(id = R.string.settings_section_external_calls),
-                        icon = Icons.Default.SettingsEthernet,
-                        containerColor = cardContainerColor
-                ) {
-                        CompactSettingsItem(
-                                title = stringResource(id = R.string.settings_external_http_chat),
-                                subtitle = stringResource(id = R.string.settings_external_http_chat_subtitle),
-                                icon = Icons.Default.SettingsEthernet,
-                                onClick = navigateToExternalHttpChatSettings
                         )
                 }
 
