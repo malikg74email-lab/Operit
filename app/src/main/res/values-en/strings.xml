@@ -3862,6 +3862,7 @@
     <string name="token_stats_rate_default_hint">Default estimate: 1 USD = %1$s CNY (not set manually)</string>
     <string name="token_stats_rate_applied_hint">Converted at 1 USD = %1$s CNY</string>
     <string name="token_stats_rate_invalid">Rate must be a positive finite number</string>
+    <string name="follow_chat_model_for_all_functions">Use the current chat model for all functions</string>
     <string name="token_stats_rate_summary">1 USD = %1$s CNY</string>
     <string name="token_stats_rate_input_prefix">1 USD =</string>
     <string name="token_stats_rate_estimated">Default estimate</string>
