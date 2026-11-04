@@ -3786,6 +3786,7 @@
     <string name="token_stats_rate_default_hint">默认估算：1 USD = %1$s CNY（未手动设置）</string>
     <string name="token_stats_rate_applied_hint">按 1 USD = %1$s CNY 换算</string>
     <string name="token_stats_rate_invalid">汇率必须为正的有限数值</string>
+    <string name="follow_chat_model_for_all_functions">Use the current chat model for all functions</string>
     <string name="token_stats_rate_summary">1 USD = %1$s CNY</string>
     <string name="token_stats_rate_input_prefix">1 USD =</string>
     <string name="token_stats_rate_estimated">默认估算</string>
