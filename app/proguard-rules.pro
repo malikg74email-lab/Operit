@@ -94,3 +94,128 @@
 # Reactor BlockHound integration with Netty
 -dontwarn reactor.blockhound.integration.BlockHoundIntegration
 -dontwarn io.netty.util.internal.Hidden$NettyBlockHoundIntegration
+
+# ============================================================================
+# Shaheen 3 release hardening (added 2026-11-04 for the first minified
+# release; evidence and rationale recorded in OPERIT_BUILD_LOG.md,
+# "Release prep (local)"). Each block is scoped to the code it protects;
+# nothing here keeps the whole app.
+# ============================================================================
+
+# --- kotlinx-serialization (release audit risk #1) --------------------------
+# 60 files under com.ai.assistance.operit carry @Serializable (data/model,
+# data/preferences, data/api, core/tools/mcp, core/tools/packTool,
+# integrations, chat persistence; ModelConfigData and CharacterCard among
+# them). These are the documented kotlinx-serialization keeps: every rule is
+# conditional on the @Serializable annotation, so no other class is retained
+# by them.
+-if @kotlinx.serialization.Serializable class **
+-keepclassmembers class <1> {
+    static <1>$Companion Companion;
+}
+
+# Keep serializer() on companion objects of serializable classes.
+-if @kotlinx.serialization.Serializable class ** {
+    static **$* *;
+}
+-keepclassmembers class <2>$<3> {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Keep INSTANCE.serializer() of serializable objects.
+-if @kotlinx.serialization.Serializable class ** {
+    public static ** INSTANCE;
+}
+-keepclassmembers class <1> {
+    public static <1> INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Generated $$serializer classes of the app's own serializable types are
+# instantiated reflectively by the serialization runtime.
+-keep,includedescriptorclasses class com.ai.assistance.operit.**$$serializer { *; }
+
+# Serialization reads annotation metadata (SerialName, polymorphic labels).
+-keepattributes RuntimeVisibleAnnotations,AnnotationDefault
+-dontnote kotlinx.serialization.**
+
+# --- ObjectBox Memory Vault (release audit risk #2) -------------------------
+# Every @Entity lives in com.ai.assistance.operit.data.model (Memory,
+# ChatEntity, MessageEntity, CharacterCard, DocumentChunk, PromptTag,
+# TokenUsageRecordEntity, ...), and the ObjectBox plugin generates
+# MyObjectBox + *_ property + *Cursor classes into that same package
+# (data/db/ObjectBox.kt imports com.ai.assistance.operit.data.model
+# .MyObjectBox). Entity and generated classes are bound together by the
+# generated model registration, so the package stays unrenamed as one unit;
+# it is also the heartland of the app's @Serializable DTOs.
+-keep class com.ai.assistance.operit.data.model.** { *; }
+-keep class io.objectbox.** { *; }
+
+# --- JNI / native bridges (release audit risk #3) ---------------------------
+# A class declaring native methods must keep its class and method names or
+# the native side cannot resolve them after obfuscation. This standard rule
+# is member-scoped: it retains nothing that declares no native methods. It
+# also covers the terminal submodule's native bridges, which are not checked
+# out in this working copy.
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
+# App-side native bridges found by grep for `external fun`, named explicitly
+# because native code also calls back into some of them by name:
+#   com.k2fsa.sherpa.ncnn.SherpaNcnn (sherpa-ncnn JNI, bundled in app sources)
+#   util.streamnative.NativeXmlSplitter / NativeMarkdownSplitter
+#   util.ripgrep.NativeRipgrep
+#   util.ToolPkgWasmRuntime (ToolPkg WASM runtime JNI)
+#   core.tools.javascript.QuickJsNativeBridge (:quickjs module object whose
+#   external funs are the QuickJS JNI entry points; the JsEngine
+#   $JsToolCallInterface reflection bridge is already kept at the top of
+#   this file)
+-keep class com.k2fsa.sherpa.ncnn.** { *; }
+-keep class com.ai.assistance.operit.util.streamnative.** { *; }
+-keep class com.ai.assistance.operit.util.ripgrep.** { *; }
+-keep class com.ai.assistance.operit.util.ToolPkgWasmRuntime { *; }
+-keep class com.ai.assistance.operit.core.tools.javascript.QuickJsNativeBridge { *; }
+
+# --- Reflection by name (release audit risk #4) -----------------------------
+# ui/common/icons/MaterialIconNameResolver resolves icons purely by name:
+#   Class.forName("androidx.compose.material.icons.filled.${name}Kt")
+#       .getMethod("get${name}", Icons.Filled)
+# so those library classes and their getter names must survive verbatim.
+-keep class androidx.compose.material.icons.filled.** { *; }
+
+# ui/common/composedsl/ToolPkgComposeDslScreen enumerates zero-arg getters
+# and fields of these Compose classes and derives DSL tokens from member
+# names at runtime (typographyGetterByToken, colorSchemeFieldByToken,
+# alignment/arrangement/font-weight getter maps). Member names only; the
+# classes themselves are statically referenced.
+-keepclassmembernames class androidx.compose.material3.Typography {
+    public *** get*();
+}
+-keepclassmembernames class androidx.compose.material3.ColorScheme {
+    *** *;
+}
+-keepclassmembernames class androidx.compose.ui.Alignment** {
+    public *** get*();
+}
+-keepclassmembernames class androidx.compose.foundation.layout.Arrangement** {
+    public *** get*();
+}
+-keepclassmembernames class androidx.compose.ui.text.font.FontWeight$Companion {
+    public *** get*();
+}
+
+# Recorded residual (no rule possible): core/tools/javascript's
+# JsJavaBridgeDelegates.loadClass resolves ARBITRARY class names supplied by
+# JS tool scripts via Class.forName; no finite keep can cover script-supplied
+# names. The bridge's own interface is kept at the top of this file. Scripts
+# hardcoding app class names are the known residual risk for the device
+# smoke pass.
+
+# --- Gemini Live voice (release audit risk #5): no rule needed --------------
+# api/voice/GeminiLiveVoiceProvider, GeminiLiveToolDeclarations and
+# RealtimeVoiceSession build and parse every socket frame MANUALLY with
+# org.json.JSONObject (verified by grep: no kotlinx-serialization types in
+# the Live path), so obfuscation cannot break its wire format. The two
+# @Serializable files elsewhere in api/voice (OpenAIVoiceProvider,
+# HttpTtsResponsePipelineStep) are covered by the serialization block above.

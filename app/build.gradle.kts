@@ -397,8 +397,8 @@ android {
         applicationId = "com.ai.assistance.operit"
         minSdk = 26
         targetSdk = 34
-        versionCode = 51
-        versionName = "1.12.2"
+        versionCode = 1000
+        versionName = "1.0.0-shaheen"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -422,8 +422,8 @@ android {
         val releaseSigningConfig = signingConfigs.findByName("release")
 
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
