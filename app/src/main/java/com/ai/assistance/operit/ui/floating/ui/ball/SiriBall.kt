@@ -28,6 +28,7 @@ import kotlin.math.*
 
 import androidx.compose.ui.platform.LocalContext
 import com.ai.assistance.operit.R
+import com.ai.assistance.operit.api.voice.RealtimeSessionState
 import com.ai.assistance.operit.data.model.InputProcessingState
 import com.ai.assistance.operit.data.model.PromptFunctionType
 import com.ai.assistance.operit.ui.floating.voice.SpeechInteractionManager
@@ -47,8 +48,18 @@ private const val StateReplying = 3
 fun SiriBall(
     floatContext: FloatContext,
     onClick: () -> Unit,
-    onTriggerResult: () -> Unit
+    onTriggerResult: () -> Unit,
+    liveCallState: RealtimeSessionState? = null,
+    liveAudioLevel: Float = 0f,
+    onLongClick: (() -> Unit)? = null
 ) {
+    // A Live call owns the microphone through AIForegroundService. When the
+    // caller supplies its state, this ball is only a visual surface for that
+    // call: the legacy cascade speech manager must stay out of the microphone.
+    val liveCallActive =
+        liveCallState != null &&
+            liveCallState != RealtimeSessionState.Ended &&
+            liveCallState !is RealtimeSessionState.Error
     // Siri配色 - 精简为4个主色调（蓝、紫、粉、青）
     val mainColor = Color(0xFF0A84FF)      // 主蓝色
     val accentColor1 = Color(0xFFBF5AF2)   // 紫色
@@ -81,30 +92,36 @@ fun SiriBall(
     }
 
     // 初始化与清理语音服务
-    DisposableEffect(Unit) {
-        scope.launch {
-            speechManager.initialize()
-            // 尝试获取焦点以便能从麦克风录音
-            val view = floatContext.chatService?.getComposeView()
-            speechManager.requestFocus(view)
+    DisposableEffect(liveCallActive) {
+        if (!liveCallActive) {
+            scope.launch {
+                speechManager.initialize()
+                // 尝试获取焦点以便能从麦克风录音
+                val view = floatContext.chatService?.getComposeView()
+                speechManager.requestFocus(view)
+            }
         }
         onDispose {
-            speechManager.cleanup()
+            if (!liveCallActive) {
+                speechManager.cleanup()
+            }
         }
     }
 
     // 收集语音识别结果流并反馈给管理器处理
-    LaunchedEffect(speechManager) {
-        speechManager.recognitionResultFlow.collect { result ->
-            speechManager.handleRecognitionResult(result.text, result.isFinal)
+    LaunchedEffect(speechManager, liveCallActive) {
+        if (!liveCallActive) {
+            speechManager.recognitionResultFlow.collect { result ->
+                speechManager.handleRecognitionResult(result.text, result.isFinal)
+            }
         }
     }
-    
+
     // 监听 AI 处理状态，完成后触发结果展示
     val aiState by floatContext.inputProcessingState
-    LaunchedEffect(aiState, ballState) {
+    LaunchedEffect(aiState, ballState, liveCallActive) {
         // 当处于 Loading 状态且 AI 处理完成时
-        if (ballState == StateLoading && aiState is InputProcessingState.Completed) {
+        if (!liveCallActive && ballState == StateLoading && aiState is InputProcessingState.Completed) {
             onTriggerResult()
             ballState = StateIdle
         }
@@ -270,8 +287,12 @@ fun SiriBall(
                 detectTapGestures(
                     onTap = {
                         onClick()
+                    },
+                    onLongPress = {
+                        onLongClick?.invoke()
                     }
-                    // 长按功能已禁用
+                    // The legacy press-to-talk gesture remains disabled below;
+                    // onLongPress above is the caller's explicit action only.
                     // onPress = {
                     //     pressStartTime = System.currentTimeMillis()
                     //     ballState = StatePressing
@@ -304,11 +325,35 @@ fun SiriBall(
             modifier = Modifier.size(floatContext.ballSize * 3.0f)
         ) {
             val center = Offset(size.width / 2f, size.height / 2f)
+            // Live presentation follows the service state: Listening reacts
+            // to the published microphone RMS, Speaking stays visibly strong,
+            // and Paused/Error contract and dim. Callers that do not supply a
+            // Live state keep the original radius and alpha exactly.
+            val liveRadiusFactor =
+                when (liveCallState) {
+                    RealtimeSessionState.Listening ->
+                        1f + liveAudioLevel.coerceIn(0f, 1f) * 0.18f
+                    RealtimeSessionState.Speaking ->
+                        1.08f + liveAudioLevel.coerceIn(0f, 1f) * 0.12f
+                    RealtimeSessionState.Thinking -> 1.03f
+                    RealtimeSessionState.Paused -> 0.84f
+                    is RealtimeSessionState.Error -> 0.9f
+                    else -> 1f
+                }
+            val liveAlphaFactor =
+                if (
+                    liveCallState == RealtimeSessionState.Paused ||
+                        liveCallState is RealtimeSessionState.Error
+                ) {
+                    0.55f
+                } else {
+                    1f
+                }
             // 应用按压缩放
-            val baseRadius = (size.minDimension / 2.0f) * pressScale
-            
+            val baseRadius = (size.minDimension / 2.0f) * pressScale * liveRadiusFactor
+
             // 淡出效果：只改变透明度，不改变缩放
-            val fadeAlpha = if (isFadingOut) 1f - fadeOutProgress.value else 1f
+            val fadeAlpha = (if (isFadingOut) 1f - fadeOutProgress.value else 1f) * liveAlphaFactor
             
             if (fadeAlpha <= 0.01f) {
                 // 淡出完成，不绘制任何内容
