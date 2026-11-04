@@ -228,3 +228,17 @@
 # Apache SSHD optional JMX + EdDSA references (absent on Android; those code paths are optional)
 -dontwarn javax.management.**
 -dontwarn net.i2p.crypto.eddsa.**
+
+# ---------------------------------------------------------------------------
+# Shaheen 3 v1.0.1 — JNI bridges (device crash 2026-11-04: NoSuchMethodError
+# on the QuickJS host callback after R8 renamed it). Native code resolves
+# these classes and their members BY NAME at runtime; keep them whole.
+# ---------------------------------------------------------------------------
+-keep class com.ai.assistance.operit.core.tools.javascript.QuickJsNativeBridge* { *; }
+-keep class com.ai.assistance.operit.core.tools.javascript.QuickJsNativeRuntime* { *; }
+-keep class com.ai.assistance.operit.core.tools.javascript.QuickJsNativeHostDispatcher { *; }
+-keep class com.ai.assistance.operit.util.ToolPkgWasmRuntime* { *; }
+-keep class com.ai.assistance.operit.util.ripgrep.NativeRipgrep { *; }
+-keep class com.ai.assistance.operit.util.streamnative.NativeMarkdownSplitter { *; }
+-keep class com.ai.assistance.operit.util.streamnative.NativeXmlSplitter { *; }
+-keep class com.k2fsa.sherpa.ncnn.SherpaNcnn* { *; }

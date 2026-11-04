@@ -60,6 +60,7 @@ import com.ai.assistance.operit.data.preferences.WakeWordPreferences
 import com.ai.assistance.operit.ui.main.MainActivity
 import com.ai.assistance.operit.util.LocaleUtils
 import com.ai.assistance.operit.util.WaifuMessageProcessor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -1224,7 +1225,18 @@ class AIForegroundService : Service() {
         liveRecoveryJob?.cancel()
         liveRecoveryJob = null
         teardownLiveCallResources()
-        liveCallStateFlow.value = finalState
+        // Shaheen 3 v1.0.1: never publish a cancellation as the call's
+        // terminal error — a cancelled call simply ends. (On device
+        // 2026-11-04 the raw "... was cancelled" text was shown as the
+        // call error.) finishLiveCall stays the single writer.
+        liveCallStateFlow.value =
+            if (finalState is RealtimeSessionState.Error &&
+                finalState.cause is CancellationException
+            ) {
+                RealtimeSessionState.Ended
+            } else {
+                finalState
+            }
         refreshServiceNotification()
         stopSelfIfIdle(ignoreAppForeground = true)
     }

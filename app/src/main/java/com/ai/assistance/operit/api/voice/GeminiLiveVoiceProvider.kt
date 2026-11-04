@@ -13,6 +13,7 @@ import com.ai.assistance.operit.util.AppLogger
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -64,12 +65,12 @@ class GeminiLiveVoiceProvider(
         /**
          * Current Gemini Live native-audio model id.
          *
-         * VERIFY AT TEST TIME (Step 0): Live model naming churns between preview
-         * generations; if setup is rejected, update this constant (or pass an explicit
-         * modelName in RealtimeSessionConfig — the value is config, never buried in
-         * frame-building strings). Kept as one named constant for exactly that reason.
+         * Shaheen 3 v1.0.1: switched from gemini-2.5-flash-native-audio-preview-12-2025
+         * (Google retires it 2026-11-17) to the GA gemini-3.8-live. Kept as one named
+         * constant: Live model naming churns, and the value is config, never buried in
+         * frame-building strings (an explicit modelName in RealtimeSessionConfig wins).
          */
-        const val DEFAULT_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
+        const val DEFAULT_LIVE_MODEL = "gemini-3.8-live"
 
         /** Prebuilt Live voice used unless the session config overrides it. */
         const val DEFAULT_VOICE_NAME = "Kore"
@@ -762,6 +763,21 @@ class GeminiLiveVoiceProvider(
     }
 
     private fun failSession(cause: Throwable) {
+        // Shaheen 3 v1.0.1: a cancelled session is NOT an error. The shipped
+        // build surfaced a raw CancellationException (obfuscated "... was
+        // cancelled") on the call screen; cancellation now closes quietly.
+        if (cause is CancellationException) {
+            AppLogger.d(TAG, "Gemini Live session cancelled; closing quietly")
+            teardownAudio()
+            synchronized(stateLock) {
+                webSocket?.cancel()
+                webSocket = null
+            }
+            setupComplete = false
+            _audioLevel.value = 0f
+            _sessionState.value = RealtimeSessionState.Ended
+            return
+        }
         val current = _sessionState.value
         if (current is RealtimeSessionState.Error) {
             return // the first cause is the recorded one

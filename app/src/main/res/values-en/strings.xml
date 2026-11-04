@@ -10,6 +10,9 @@
     <string name="live_call_interrupted">Interrupted</string>
     <string name="live_call_paused">Paused</string>
     <string name="live_call_error_title">The call could not continue</string>
+    <string name="live_call_error_permission">Microphone permission is needed for a live call. Please allow it and try again.</string>
+    <string name="live_call_error_network">The call could not connect. Please check the internet connection and try again.</string>
+    <string name="live_call_error_generic">The call could not continue. Please try again.</string>
     <string name="live_call_tap_to_start">Tap the orb to start</string>
     <string name="live_call_mute">Mute</string>
     <string name="live_call_resume">Resume</string>
@@ -7194,15 +7197,15 @@
     <string name="chat_summarize_generation_failed">Summary generation failed: %1$s</string>
 
     <!-- AIForegroundService (新增) -->
-    <string name="service_operit_running">Operit is running</string>
+    <string name="service_operit_running">Shaheen is running</string>
     <string name="service_chat_complete_reminder">Chat completion reminder</string>
     <string name="service_chat_complete_reminder_sound">Chat completion reminder (sound)</string>
     <string name="service_chat_complete_reminder_vibration">Chat completion reminder (vibration)</string>
     <string name="service_chat_complete_reminder_sound_vibration">Chat completion reminder (sound and vibration)</string>
     <string name="service_keep_background">Keep Operit running in the background.</string>
     <string name="service_notify_when_complete">Notify you when the conversation is complete.</string>
-    <string name="service_running_wake_pause">Operit is running (wake paused)</string>
-    <string name="service_running_wake_listening">Operit is running (wake listening)</string>
+    <string name="service_running_wake_pause">Shaheen is running (wake paused)</string>
+    <string name="service_running_wake_listening">Shaheen is running (wake listening)</string>
     <string name="service_running_stats">Conversations %1$d · Tools %2$d</string>
     <string name="service_running_http_listening">External HTTP listening on port %1$d</string>
     <string name="service_running_with_http">%1$s · HTTP %2$d</string>

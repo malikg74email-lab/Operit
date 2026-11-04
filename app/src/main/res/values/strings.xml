@@ -10,6 +10,9 @@
     <string name="live_call_interrupted">Interrupted</string>
     <string name="live_call_paused">Paused</string>
     <string name="live_call_error_title">The call could not continue</string>
+    <string name="live_call_error_permission">Microphone permission is needed for a live call. Please allow it and try again.</string>
+    <string name="live_call_error_network">The call could not connect. Please check the internet connection and try again.</string>
+    <string name="live_call_error_generic">The call could not continue. Please try again.</string>
     <string name="live_call_tap_to_start">Tap the orb to start</string>
     <string name="live_call_mute">Mute</string>
     <string name="live_call_resume">Resume</string>
@@ -7719,15 +7722,15 @@
     <string name="chat_summarize_generation_failed">总结生成失败: %1$s</string>
 
     <!-- AIForegroundService (新增) -->
-    <string name="service_operit_running">Operit 正在运行</string>
+    <string name="service_operit_running">Shaheen is running</string>
     <string name="service_chat_complete_reminder">对话完成提醒</string>
     <string name="service_chat_complete_reminder_sound">对话完成提醒（提示音）</string>
     <string name="service_chat_complete_reminder_vibration">对话完成提醒（震动）</string>
     <string name="service_chat_complete_reminder_sound_vibration">对话完成提醒（提示音和震动）</string>
     <string name="service_keep_background">保持 Operit 在后台运行。</string>
     <string name="service_notify_when_complete">对话完成后提醒你。</string>
-    <string name="service_running_wake_pause">Operit 正在运行（唤醒暂停）</string>
-    <string name="service_running_wake_listening">Operit 正在运行（唤醒监听中）</string>
+    <string name="service_running_wake_pause">Shaheen is running (wake paused)</string>
+    <string name="service_running_wake_listening">Shaheen is running (wake listening)</string>
     <string name="service_running_stats">运行对话 %1$d · 调用工具 %2$d</string>
     <string name="service_running_http_listening">外部 HTTP 正在监听端口 %1$d</string>
     <string name="service_running_with_http">%1$s · 外部 HTTP %2$d</string>

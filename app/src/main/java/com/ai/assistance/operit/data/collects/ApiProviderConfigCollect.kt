@@ -61,12 +61,12 @@ object ApiProviderConfigs {
         ),
         ProviderApiConfig(
             providerType = ApiProviderType.GOOGLE,
-            defaultModelName = "gemini-2.0-flash",
+            defaultModelName = "gemini-3.5-flash-lite",
             defaultApiEndpoint = "https://generativelanguage.googleapis.com/v1beta/models"
         ),
         ProviderApiConfig(
             providerType = ApiProviderType.GEMINI_GENERIC,
-            defaultModelName = "gemini-2.0-flash",
+            defaultModelName = "gemini-3.5-flash-lite",
             defaultApiEndpoint = ""
         ),
         ProviderApiConfig(

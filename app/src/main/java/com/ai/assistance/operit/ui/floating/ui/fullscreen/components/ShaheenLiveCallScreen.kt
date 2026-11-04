@@ -149,9 +149,16 @@ fun ShaheenLiveCallScreen(floatContext: FloatContext) {
             RealtimeSessionState.Paused -> stringResource(R.string.live_call_paused)
             is RealtimeSessionState.Error -> stringResource(R.string.live_call_error_title)
         }
-    val errorCause =
+    // Shaheen 3 v1.0.1: the call screen speaks plain words only. Raw
+    // exception text (e.g. an obfuscated "... was cancelled") is for the
+    // logs, never for Malik.
+    val errorText =
         (liveState as? RealtimeSessionState.Error)?.let { error ->
-            error.cause.message ?: error.cause.javaClass.simpleName
+            when (error.cause) {
+                is SecurityException -> stringResource(R.string.live_call_error_permission)
+                is java.io.IOException -> stringResource(R.string.live_call_error_network)
+                else -> stringResource(R.string.live_call_error_generic)
+            }
         }
 
     val onOrbClick: () -> Unit = {
@@ -296,7 +303,7 @@ fun ShaheenLiveCallScreen(floatContext: FloatContext) {
                     when {
                         liveState is RealtimeSessionState.Error -> {
                             Text(
-                                text = errorCause.orEmpty(),
+                                text = errorText.orEmpty(),
                                 color = Color(0xFFFFB4AE),
                                 fontSize = 14.sp,
                                 textAlign = TextAlign.Center,
