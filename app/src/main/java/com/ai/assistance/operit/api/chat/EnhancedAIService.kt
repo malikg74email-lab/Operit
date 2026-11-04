@@ -1747,10 +1747,22 @@ class EnhancedAIService private constructor(private val context: Context) {
             // If content is empty, it means an error likely occurred or the model returned nothing.
             // We must still finalize the conversation to reset the state correctly.
             if (content.isEmpty()) {
-                AppLogger.d(TAG, "Stream content is empty. Finalizing conversation state.")
+                // Shaheen 3 v1.0.2: this branch used to finalize a BLANK
+                // assistant message — on device 2026-11-04 every model seemed
+                // to "reply with nothing" (empty Response cards, no reason
+                // shown). Finalize with a plain-words notice instead, so the
+                // conversation itself says what happened and what to try.
+                val notice =
+                    this@EnhancedAIService.context.getString(
+                        R.string.chat_empty_response_notice
+                    )
+                AppLogger.w(
+                    TAG,
+                    "Stream content is empty. Finalizing with the empty-response notice."
+                )
                 finalizeAssistantResponse(
                     context = context,
-                    content = content,
+                    content = notice,
                     enableMemoryAutoUpdate = enableMemoryAutoUpdate,
                     onNonFatalError = onNonFatalError,
                     isSubTask = isSubTask,

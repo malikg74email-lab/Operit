@@ -8539,4 +8539,5 @@
     <string name="market_version_too_low_message">Current client version %1$s is lower than the minimum required version %2$s for this resource. Please update the client before downloading.</string>
     <string name="market_version_too_high_message">Current client version %1$s is higher than the maximum supported version %2$s for this resource. Please use a supported client version.</string>
     <string name="thinking_config_invalid_json">Invalid Thinking Configuration</string>
+    <string name="chat_empty_response_notice">No reply came from the model. Please check the internet connection, or pick a different model, and send again.</string>
 </resources>
