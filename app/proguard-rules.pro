@@ -219,3 +219,12 @@
 # the Live path), so obfuscation cannot break its wire format. The two
 # @Serializable files elsewhere in api/voice (OpenAIVoiceProvider,
 # HttpTtsResponsePipelineStep) are covered by the serialization block above.
+
+# --- Shaheen 3 release fix: optional-dependency references (R8 missing classes, run #136) ---
+# pdfbox's optional JPEG 2000 decoder (not bundled; JPX image decoding only)
+-dontwarn com.gemalto.jp2.**
+# AutoValue-shaded JavaPoet references JDK annotation-processing APIs (compile-time only, absent on Android)
+-dontwarn javax.lang.model.**
+# Apache SSHD optional JMX + EdDSA references (absent on Android; those code paths are optional)
+-dontwarn javax.management.**
+-dontwarn net.i2p.crypto.eddsa.**
